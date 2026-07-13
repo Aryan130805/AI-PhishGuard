@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "PhishGuard Simulator Assistant",
+  "version": "1.0.0",
+  "description": "Phishing-awareness browser assistant for PhishGuard training platforms.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "notifications"
+  ],
+  "host_permissions": [
+    "http://localhost:8000/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost:3000/*"
+      ],
+      "js": [
+        "content-script.js"
+      ],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

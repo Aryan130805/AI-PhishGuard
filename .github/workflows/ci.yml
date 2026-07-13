@@ -1,0 +1,149 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test_and_security:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: phishguard
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 1. Setup Python Environment
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 2. Cache Python dependencies
+      - name: Cache Pip Packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('phishguard/backend/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      # 3. Install Python Dependencies
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r phishguard/backend/requirements.txt
+          pip install pytest-cov pip-audit httpx
+
+      # 4. Run Pytest Suite with Coverage
+      - name: Run Backend Tests
+        env:
+          PYTHONPATH: phishguard/backend
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_DB: phishguard
+          CELERY_BROKER_URL: redis://localhost:6379/0
+          CELERY_RESULT_BACKEND: redis://localhost:6379/0
+        run: |
+          cd phishguard/backend
+          pytest --cov=app/services --cov-report=xml -v
+
+      # 5. Run pip-audit
+      - name: Run pip-audit Scan
+        run: |
+          cd phishguard/backend
+          pip-audit
+
+      # 6. Setup Node.js Environment
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # 7. Cache Node dependencies
+      - name: Cache npm packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('phishguard/frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      # 8. Install Frontend Dependencies
+      - name: Install Frontend Dependencies
+        run: |
+          cd phishguard/frontend
+          npm install
+          npx playwright install --with-deps chromium
+
+      # 9. Run npm audit
+      - name: Run npm audit Scan
+        run: |
+          cd phishguard/frontend
+          npm audit --audit-level=high || echo "Allowed dev warnings"
+
+      # 10. Start Services for Playwright & ZAP baseline scan
+      - name: Start Application Servers
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_DB: phishguard
+          CELERY_BROKER_URL: redis://localhost:6379/0
+          CELERY_RESULT_BACKEND: redis://localhost:6379/0
+        run: |
+          cd phishguard/backend
+          # Run database migrations
+          alembic upgrade head || true
+          
+          # Start uvicorn server in background
+          python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 &
+          
+          # Start vite dev server in background
+          cd ../frontend
+          npm run dev -- --port 3000 &
+          
+          # Wait for ports to become active
+          npx wait-on http://127.0.0.1:8000/health http://localhost:3000
+
+      # 11. Run Playwright E2E Tests
+      - name: Run Playwright E2E Tests
+        run: |
+          cd phishguard/frontend
+          npx playwright test
+
+      # 12. Run OWASP ZAP Baseline Scan
+      - name: Run ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: 'http://localhost:3000/'
+          fail_action: false

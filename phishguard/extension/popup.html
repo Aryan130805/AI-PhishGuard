@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- HEADER -->
+    <div class="header">
+      <div class="logo-wrapper">🛡️</div>
+      <div class="title-group">
+        <h3>PhishGuard Shield</h3>
+        <span class="badge">MV3 Assistant</span>
+      </div>
+    </div>
+    
+    <!-- LOGIN FORM CONTAINER -->
+    <div id="loginView" class="view hidden">
+      <form id="loginForm" class="login-form">
+        <div class="form-group">
+          <label>Employee Email</label>
+          <input type="email" id="emailInput" required placeholder="name@company.com">
+        </div>
+        <div class="form-group">
+          <label>Security Password</label>
+          <input type="password" id="passwordInput" required placeholder="••••••••">
+        </div>
+        <div id="loginError" class="error-msg hidden">Invalid credentials</div>
+        <button type="submit" id="submitBtn" class="btn-primary">
+          Log In & Enable Protection
+        </button>
+      </form>
+    </div>
+
+    <!-- DASHBOARD STATUS CONTAINER -->
+    <div id="dashboardView" class="view hidden">
+      <div class="user-info">
+        <span id="userEmail" class="email-display">employee@company.com</span>
+        <button id="logoutBtn" class="btn-logout" title="Log Out">Log Out</button>
+      </div>
+
+      <div class="content">
+        <!-- RISK METRIC -->
+        <div class="metric-card">
+          <span class="metric-label">Employee Risk Level:</span>
+          <span id="riskLevelBadge" class="status-badge safe">SAFE</span>
+        </div>
+
+        <div class="metric-card">
+          <span class="metric-label">Risk Score:</span>
+          <span id="riskScoreValue" class="score-display">0.0</span>
+        </div>
+
+        <!-- LESSONS METRIC -->
+        <div id="lessonsCard" class="status-card lessons-alert">
+          <div class="lessons-details">
+            <span class="lessons-label">Assigned Modules:</span>
+            <span id="lessonsCount" class="lessons-value">0 unread</span>
+          </div>
+        </div>
+
+        <!-- TIPS BOX -->
+        <div class="info-box">
+          <h4 class="tips-title">💡 Security Check-In</h4>
+          <ul class="tips-list">
+            <li>Check the sender domain on all external attachments.</li>
+            <li>Look out for urgent subject lines asking for corrections.</li>
+            <li>Use the "Report Simulation" button on training drills.</li>
+          </ul>
+        </div>
+
+        <button id="syncBtn" class="btn-secondary">
+          Sync Status
+        </button>
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+      <span id="connectionState">Connecting...</span>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

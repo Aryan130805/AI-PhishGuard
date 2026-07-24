@@ -1,10 +1,11 @@
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
-import { apiFetch } from './lib/api';
+import { supabase } from './lib/supabase';
+import type { User, Session } from '@supabase/supabase-js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface AuthUser {
-  id: number;
+  id: string;
   email: string;
   is_admin: boolean;
   is_active: boolean;
@@ -17,14 +18,15 @@ export type UserRole = 'admin' | 'employee' | null;
 
 interface AuthContextValue {
   user: AuthUser | null;
+  supabaseUser: User | null;
+  session: Session | null;
   role: UserRole;
   isAdmin: boolean;
   /** True while the initial session check is in progress. */
   isLoading: boolean;
   /**
-   * Sends credentials to the backend and, on success, fetches the user
-   * profile to derive the role. Returns the role string so callers can
-   * immediately redirect to the correct portal.
+   * Logs in via Supabase Auth then reads the profile from the `users` table
+   * to determine the role. Returns the role so callers can redirect.
    */
   login: (email: string, password: string) => Promise<{ ok: boolean; role: UserRole; detail?: string }>;
   logout: () => Promise<void>;
@@ -34,97 +36,152 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-// API base is handled centrally via apiFetch (see src/lib/api.ts)
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+async function fetchProfile(supabaseUid: string): Promise<AuthUser | null> {
+  const { data, error } = await supabase
+    .from('users')
+    .select(`
+      id,
+      email,
+      is_admin,
+      is_active,
+      organizations ( name ),
+      departments ( name ),
+      roles ( name )
+    `)
+    .eq('supabase_uid', supabaseUid)
+    .single();
+
+  if (error || !data) return null;
+
+  return {
+    id: data.id,
+    email: data.email,
+    is_admin: data.is_admin ?? false,
+    is_active: data.is_active ?? true,
+    organization_name: (data.organizations as { name?: string })?.name ?? undefined,
+    department_name: (data.departments as { name?: string })?.name ?? undefined,
+    role_name: (data.roles as { name?: string })?.name ?? undefined,
+  };
+}
 
 // ─── Provider ────────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const [supabaseUser, setSupabaseUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // start loading until session check resolves
+  const [isLoading, setIsLoading] = useState(true);
 
-  // ── Derive role from user object (source of truth = backend) ──
+  // ── Derive role from user object ───────────────────────────────────────────
   const role: UserRole = user === null ? null : user.is_admin ? 'admin' : 'employee';
   const isAdmin = role === 'admin';
 
-  // ── Session check on mount ──────────────────────────────────────────────────
+  // ── Session bootstrap — runs once on mount ─────────────────────────────────
   useEffect(() => {
     let cancelled = false;
 
-    (async () => {
-      try {
-        const res = await apiFetch('/users/me');
-        if (!cancelled) {
-          if (res.ok) {
-            const data: AuthUser = await res.json();
-            setUser(data);
-          } else {
-            // 401 / 403 → no active session
-            localStorage.removeItem('employee_token');
-            setUser(null);
-          }
-        }
-      } catch {
-        // Network error or backend down → treat as unauthenticated
-        if (!cancelled) setUser(null);
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    })();
+    supabase.auth.getSession().then(async ({ data: { session: s } }) => {
+      if (cancelled) return;
+      setSession(s);
+      setSupabaseUser(s?.user ?? null);
 
-    return () => { cancelled = true; };
+      if (s?.user) {
+        // Check localStorage for role first (fast path)
+        const cached = localStorage.getItem('pg_user');
+        if (cached) {
+          try { setUser(JSON.parse(cached)); } catch { /* ignore */ }
+        }
+        const profile = await fetchProfile(s.user.id);
+        if (!cancelled) {
+          setUser(profile);
+          if (profile) localStorage.setItem('pg_user', JSON.stringify(profile));
+        }
+      } else {
+        localStorage.removeItem('pg_user');
+        localStorage.removeItem('employee_token');
+      }
+      if (!cancelled) setIsLoading(false);
+    });
+
+    // Listen for auth state changes (login / logout / token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, s) => {
+        if (cancelled) return;
+        setSession(s);
+        setSupabaseUser(s?.user ?? null);
+
+        if (s?.user) {
+          const profile = await fetchProfile(s.user.id);
+          setUser(profile);
+          if (profile) localStorage.setItem('pg_user', JSON.stringify(profile));
+        } else {
+          setUser(null);
+          localStorage.removeItem('pg_user');
+          localStorage.removeItem('employee_token');
+        }
+        setIsLoading(false);
+      }
+    );
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
-  // ── Login ───────────────────────────────────────────────────────────────────
+  // ── Login ──────────────────────────────────────────────────────────────────
   const login = useCallback(async (
     email: string,
     password: string
   ): Promise<{ ok: boolean; role: UserRole; detail?: string }> => {
     try {
-      const loginRes = await apiFetch('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-      if (!loginRes.ok) {
-        const err = await loginRes.json().catch(() => ({}));
-        return { ok: false, role: null, detail: err.detail || 'Invalid credentials.' };
+      if (error || !data.user) {
+        return { ok: false, role: null, detail: error?.message ?? 'Invalid credentials.' };
       }
 
-      const loginData = await loginRes.json().catch(() => ({}));
-      if (loginData.access_token) {
-        localStorage.setItem('employee_token', loginData.access_token);
+      // Store access token for any legacy apiFetch calls still referencing local backend
+      if (data.session?.access_token) {
+        localStorage.setItem('employee_token', data.session.access_token);
       }
 
-      // After storing token and setting cookies, fetch profile for authoritative role
-      const meRes = await apiFetch('/users/me');
-      if (!meRes.ok) {
-        localStorage.removeItem('employee_token');
-        return { ok: false, role: null, detail: 'Authentication succeeded but session could not be verified.' };
+      const profile = await fetchProfile(data.user.id);
+      if (!profile) {
+        // Supabase Auth succeeded but no profile row — treat as employee with no org
+        const minimal: AuthUser = {
+          id: data.user.id,
+          email: data.user.email ?? email,
+          is_admin: false,
+          is_active: true,
+        };
+        setUser(minimal);
+        return { ok: true, role: 'employee' };
       }
 
-      const userData: AuthUser = await meRes.json();
-      setUser(userData);
-
-      const derivedRole: UserRole = userData.is_admin ? 'admin' : 'employee';
+      setUser(profile);
+      localStorage.setItem('pg_user', JSON.stringify(profile));
+      const derivedRole: UserRole = profile.is_admin ? 'admin' : 'employee';
       return { ok: true, role: derivedRole };
-    } catch {
-      return { ok: false, role: null, detail: 'Could not connect to the backend server.' };
+    } catch (err) {
+      return { ok: false, role: null, detail: 'Could not connect to authentication server.' };
     }
   }, []);
 
-  // ── Logout ──────────────────────────────────────────────────────────────────
+  // ── Logout ─────────────────────────────────────────────────────────────────
   const logout = useCallback(async () => {
-    try {
-      await apiFetch('/auth/logout', { method: 'POST' });
-    } catch {
-      // Best effort
-    }
+    await supabase.auth.signOut().catch(() => { /* best effort */ });
     localStorage.removeItem('employee_token');
+    localStorage.removeItem('pg_user');
     setUser(null);
+    setSupabaseUser(null);
+    setSession(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, role, isAdmin, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, supabaseUser, session, role, isAdmin, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

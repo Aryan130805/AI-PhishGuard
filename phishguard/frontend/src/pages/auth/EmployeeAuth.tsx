@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../../components/ui/Toast';
 import { useAuth } from '../../AuthContext';
-import { apiFetch } from '../../lib/api';
+import { supabase } from '../../lib/supabase';
 
 interface PublicOrganization {
   id: number;
@@ -53,19 +53,26 @@ export default function EmployeeAuth() {
   const hasSpecial = /[^A-Za-z0-9]/.test(password);
   const isPasswordStrong = hasMinLength && hasUppercase && hasNumber && hasSpecial;
 
-  // ── Fetch verified organizations with debouncing ────────────────────────────
-  const fetchOrganizations = useCallback(async (query: str) => {
+  // ── Fetch verified organizations from Supabase (debounced) ───────────────────
+  const fetchOrganizations = useCallback(async (query: string) => {
     setIsOrgLoading(true);
     try {
-      const endpoint = query.trim() 
-        ? `/organizations/search?q=${encodeURIComponent(query.trim())}` 
-        : '/organizations';
-      const res = await apiFetch(endpoint);
-      if (res.ok) {
-        const data: PublicOrganization[] = await res.json();
-        setOrganizations(data);
-      } else {
+      let q = supabase
+        .from('organizations')
+        .select('id, name, logo_url, industry, is_verified')
+        .eq('is_verified', true)
+        .order('name', { ascending: true })
+        .limit(20);
+
+      if (query.trim()) {
+        q = q.ilike('name', `%${query.trim()}%`);
+      }
+
+      const { data, error } = await q;
+      if (error || !data) {
         setOrganizations([]);
+      } else {
+        setOrganizations(data as PublicOrganization[]);
       }
     } catch {
       setOrganizations([]);
@@ -173,33 +180,66 @@ export default function EmployeeAuth() {
 
     setIsLoading(true);
     try {
-      const res = await apiFetch('/auth/register-employee', {
-        method: 'POST',
-        body: JSON.stringify({
-          first_name: firstName.trim(),
-          last_name: lastName.trim(),
-          email: email.trim(),
-          password,
-          organization_id: selectedOrg.id
-        })
+      // 1. Create Supabase Auth user
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          data: {
+            first_name: firstName.trim(),
+            last_name: lastName.trim(),
+            role: 'employee',
+          },
+        },
       });
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
+      if (signUpError || !signUpData.user) {
         setIsLoading(false);
-        addToast({ title: 'Registration Failed', description: err.detail || 'Could not create account.', type: 'error' });
+        addToast({
+          title: 'Registration Failed',
+          description: signUpError?.message ?? 'Could not create account. This email may already be registered.',
+          type: 'error',
+        });
         return;
       }
 
-      addToast({ title: 'Account Created!', description: 'Logging you in automatically...', type: 'success' });
+      const supabaseUid = signUpData.user.id;
 
-      // Auto login after successful registration
-      const loginResult = await login(email, password);
+      // 2. Get employee role id
+      let roleId: number | null = null;
+      const { data: roleRow } = await supabase
+        .from('roles')
+        .select('id')
+        .eq('name', 'employee')
+        .single();
+      if (roleRow) roleId = (roleRow as { id: number }).id;
+
+      // 3. Create user profile row linking auth uid -> org
+      await supabase.from('users').insert({
+        supabase_uid: supabaseUid,
+        email: email.trim(),
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        organization_id: selectedOrg.id,
+        is_admin: false,
+        is_active: true,
+        role_id: roleId,
+      });
+
+      addToast({ title: 'Account Created! 🎉', description: 'Logging you in automatically...', type: 'success' });
+
+      // 4. Auto login
+      const loginResult = await login(email.trim(), password);
       setIsLoading(false);
 
       if (loginResult.ok) {
         navigate('/dashboard', { replace: true });
       } else {
+        addToast({
+          title: 'Confirm Your Email',
+          description: 'Check your inbox and confirm your email address, then sign in.',
+          type: 'info',
+        });
         setMode('signin');
       }
     } catch {

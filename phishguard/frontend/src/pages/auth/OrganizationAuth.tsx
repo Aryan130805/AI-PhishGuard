@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../../components/ui/Toast';
 import { useAuth } from '../../AuthContext';
-import { apiFetch } from '../../lib/api';
+import { supabase } from '../../lib/supabase';
 
 const INDUSTRIES = [
   'Technology & Software',
@@ -82,7 +82,7 @@ export default function OrganizationAuth() {
         navigate('/', { replace: true });
       }
     } else {
-      addToast({ title: 'Login Failed', description: result.detail || 'Invalid organization credentials.', type: 'error' });
+      addToast({ title: 'Login Failed', description: result.detail ?? 'Invalid organization credentials.', type: 'error' });
     }
   };
 
@@ -112,38 +112,90 @@ export default function OrganizationAuth() {
 
     setIsLoading(true);
     try {
-      const res = await apiFetch('/auth/register-organization', {
-        method: 'POST',
-        body: JSON.stringify({
+      // 1. Create Supabase Auth user
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: { data: { org_name: orgName.trim(), role: 'admin' } },
+      });
+
+      if (signUpError || !signUpData.user) {
+        setIsLoading(false);
+        addToast({
+          title: 'Registration Failed',
+          description: signUpError?.message ?? 'Could not create account. This email may already be registered.',
+          type: 'error',
+        });
+        return;
+      }
+
+      const supabaseUid = signUpData.user.id;
+
+      // 2. Insert organization record
+      const { data: orgData, error: orgError } = await supabase
+        .from('organizations')
+        .insert({
           name: orgName.trim(),
-          email: email.trim(),
-          password,
           industry,
           company_size: companySize,
           website: website.trim() || null,
           country: country.trim() || null,
           state: state.trim() || null,
           city: city.trim() || null,
-          logo_url: logoUrl.trim() || null
+          logo_url: logoUrl.trim() || null,
+          is_verified: false,
         })
-      });
+        .select('id')
+        .single();
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
+      if (orgError || !orgData) {
         setIsLoading(false);
-        addToast({ title: 'Registration Failed', description: err.detail || 'Could not register organization.', type: 'error' });
+        addToast({
+          title: 'Setup Error',
+          description: 'Account created but organization setup failed. Please contact support.',
+          type: 'error',
+        });
         return;
       }
 
-      addToast({ title: 'Organization Registered!', description: 'Logging into admin dashboard...', type: 'success' });
+      // 3. Get admin role id
+      let roleId: number | null = null;
+      const { data: roleRow } = await supabase
+        .from('roles')
+        .select('id')
+        .eq('name', 'admin')
+        .single();
+      if (roleRow) roleId = (roleRow as { id: number }).id;
 
-      // Automatically sign in
-      const loginResult = await login(email, password);
+      // 4. Create user profile linking auth uid → org
+      await supabase.from('users').insert({
+        supabase_uid: supabaseUid,
+        email: email.trim(),
+        organization_id: orgData.id,
+        is_admin: true,
+        is_active: true,
+        role_id: roleId,
+      });
+
+      addToast({
+        title: 'Organization Registered! 🎉',
+        description: 'Logging into your admin dashboard...',
+        type: 'success',
+      });
+
+      // 5. Auto sign in
+      const loginResult = await login(email.trim(), password);
       setIsLoading(false);
 
       if (loginResult.ok) {
         navigate('/admin/dashboard', { replace: true });
       } else {
+        // Supabase may require email confirmation
+        addToast({
+          title: 'Confirm Your Email',
+          description: 'Check your inbox and confirm your email address, then sign in.',
+          type: 'info',
+        });
         setMode('signin');
       }
     } catch {

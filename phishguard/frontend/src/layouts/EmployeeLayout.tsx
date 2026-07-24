@@ -49,15 +49,7 @@ export default function EmployeeLayout() {
         { name: 'AI Campaign Generator', to: '/ai-generator', icon: Sparkles, description: 'Generate AI test campaigns' },
       ],
     },
-    {
-      category: 'Employees',
-      icon: Users,
-      items: [
-        { name: 'Employees', to: '/employees', icon: UserCheck, description: 'Staff directory' },
-        { name: 'Departments', to: '/departments', icon: Building2, description: 'Department performance' },
-        { name: 'Groups', to: '/groups', icon: Users, description: 'Security risk groups' },
-      ],
-    },
+
     {
       category: 'AI Center',
       icon: Brain,

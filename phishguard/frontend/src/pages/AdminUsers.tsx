@@ -555,37 +555,39 @@ export default function AdminUsers() {
         </Card>
       </div>
 
-      {/* Navigation Tabs (Active Staff Directory vs Pending Join Requests) */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-        <button
-          onClick={() => setActiveTab('directory')}
-          className={`px-4 py-2 rounded-xl font-semibold text-xs transition-all flex items-center gap-2 ${
-            activeTab === 'directory'
-              ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
-              : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
-          }`}
-        >
-          <Users size={14} />
-          <span>Active Staff Directory ({employees.length})</span>
-        </button>
+      {/* Navigation Tabs (Admin Only) */}
+      {user?.is_admin && (
+        <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+          <button
+            onClick={() => setActiveTab('directory')}
+            className={`px-4 py-2 rounded-xl font-semibold text-xs transition-all flex items-center gap-2 ${
+              activeTab === 'directory'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
+                : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+            }`}
+          >
+            <Users size={14} />
+            <span>Active Staff Directory ({employees.length})</span>
+          </button>
 
-        <button
-          onClick={() => setActiveTab('pending')}
-          className={`px-4 py-2 rounded-xl font-semibold text-xs transition-all flex items-center gap-2 relative ${
-            activeTab === 'pending'
-              ? 'bg-amber-600 text-white shadow-lg shadow-amber-500/20'
-              : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
-          }`}
-        >
-          <Clock size={14} />
-          <span>Pending Join Requests</span>
-          {pendingRequests.length > 0 && (
-            <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-bold text-[10px] animate-pulse">
-              {pendingRequests.length}
-            </span>
-          )}
-        </button>
-      </div>
+          <button
+            onClick={() => setActiveTab('pending')}
+            className={`px-4 py-2 rounded-xl font-semibold text-xs transition-all flex items-center gap-2 relative ${
+              activeTab === 'pending'
+                ? 'bg-amber-600 text-white shadow-lg shadow-amber-500/20'
+                : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+            }`}
+          >
+            <Clock size={14} />
+            <span>Pending Join Requests</span>
+            {pendingRequests.length > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-bold text-[10px] animate-pulse">
+                {pendingRequests.length}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Directory Tab Content */}
       {activeTab === 'directory' && (

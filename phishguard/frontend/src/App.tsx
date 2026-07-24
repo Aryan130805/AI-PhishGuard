@@ -33,6 +33,7 @@ import EmployeeDashboard from './pages/EmployeeDashboard';
 import EmployeeLessons from './pages/EmployeeLessons';
 import EmployeeQuiz from './pages/EmployeeQuiz';
 import EmployeeCertificates from './pages/EmployeeCertificates';
+import DepartmentPerformance from './pages/DepartmentPerformance';
 import EmployeeProfile from './pages/EmployeeProfile';
 import EmployeeNotifications from './pages/EmployeeNotifications';
 import SimulatedLanding from './pages/SimulatedLanding';
@@ -80,12 +81,7 @@ export default function App() {
                 <Route path="/templates" element={<AdminAiGenerator />} />
                 <Route path="/ai-generator" element={<AdminAiGenerator />} />
                 <Route path="/employees" element={<AdminUsers />} />
-                <Route path="/departments" element={
-                  <div className="p-4">
-                    <h2 className="text-xl font-bold text-white">Department Overview</h2>
-                    <p className="text-sm text-slate-400 mt-2">View department training performance and metrics.</p>
-                  </div>
-                } />
+                <Route path="/departments" element={<DepartmentPerformance />} />
                 <Route path="/groups" element={
                   <div className="p-4">
                     <h2 className="text-xl font-bold text-white">Employee Security Groups</h2>
@@ -159,12 +155,7 @@ export default function App() {
                 <Route path="reports" element={<AdminReports />} />
                 <Route path="users" element={<AdminUsers />} />
                 <Route path="employees" element={<AdminUsers />} />
-                <Route path="departments" element={
-                  <div className="p-4">
-                    <h2 className="text-xl font-bold text-white">Department Management</h2>
-                    <p className="text-sm text-slate-400 mt-2">Configure organizational units and department structures.</p>
-                  </div>
-                } />
+                <Route path="departments" element={<DepartmentPerformance />} />
                 <Route path="groups" element={
                   <div className="p-4">
                     <h2 className="text-xl font-bold text-white">Employee Groups</h2>

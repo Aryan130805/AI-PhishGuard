@@ -82,28 +82,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
-    supabase.auth.getSession().then(async ({ data: { session: s } }) => {
-      if (cancelled) return;
-      setSession(s);
-      setSupabaseUser(s?.user ?? null);
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const s = data?.session ?? null;
+        if (cancelled) return;
+        setSession(s);
+        setSupabaseUser(s?.user ?? null);
 
-      if (s?.user) {
-        // Check localStorage for role first (fast path)
-        const cached = localStorage.getItem('pg_user');
-        if (cached) {
-          try { setUser(JSON.parse(cached)); } catch { /* ignore */ }
+        if (s?.user) {
+          // Check localStorage for role first (fast path)
+          const cached = localStorage.getItem('pg_user');
+          if (cached) {
+            try { setUser(JSON.parse(cached)); } catch { /* ignore */ }
+          }
+          const profile = await fetchProfile(s.user.id);
+          if (!cancelled) {
+            setUser(profile);
+            if (profile) localStorage.setItem('pg_user', JSON.stringify(profile));
+          }
+        } else {
+          localStorage.removeItem('pg_user');
+          localStorage.removeItem('employee_token');
         }
-        const profile = await fetchProfile(s.user.id);
-        if (!cancelled) {
-          setUser(profile);
-          if (profile) localStorage.setItem('pg_user', JSON.stringify(profile));
-        }
-      } else {
-        localStorage.removeItem('pg_user');
-        localStorage.removeItem('employee_token');
+      } catch (err) {
+        console.warn('Auth session check error:', err);
+      } finally {
+        if (!cancelled) setIsLoading(false);
       }
-      if (!cancelled) setIsLoading(false);
-    });
+    })();
 
     // Listen for auth state changes (login / logout / token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(

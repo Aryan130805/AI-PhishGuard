@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Users, UserPlus, Search, Filter, ShieldAlert, ShieldCheck, Mail,
   Building2, CheckCircle2, AlertTriangle, Plus, X, Loader2, RefreshCw,
-  MoreVertical, Shield, ChevronRight
+  MoreVertical, Shield, ChevronRight, UserX, Clock, Bell
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
@@ -25,7 +25,16 @@ export interface EmployeeRecord {
   joined_date?: string;
 }
 
-// Fallback seed data for instant, reliable display across organizations
+export interface PendingRequest {
+  id: string | number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  department_name: string;
+  requested_at: string;
+}
+
+// Initial demo active employees
 const INITIAL_DEMO_EMPLOYEES: EmployeeRecord[] = [
   {
     id: 1,
@@ -169,11 +178,33 @@ const INITIAL_DEMO_EMPLOYEES: EmployeeRecord[] = [
   }
 ];
 
+// Initial demo pending joining requests
+const INITIAL_PENDING_REQUESTS: PendingRequest[] = [
+  {
+    id: 'p-1',
+    first_name: 'Mark',
+    last_name: 'Taylor',
+    email: 'mark.taylor@company.com',
+    department_name: 'Engineering',
+    requested_at: '10 mins ago'
+  },
+  {
+    id: 'p-2',
+    first_name: 'Jessica',
+    last_name: 'Alba',
+    email: 'jessica.alba@company.com',
+    department_name: 'Marketing',
+    requested_at: '1 hour ago'
+  }
+];
+
 export default function AdminUsers() {
   const { user } = useAuth();
   const { addToast } = useToast();
   
   const [employees, setEmployees] = useState<EmployeeRecord[]>(INITIAL_DEMO_EMPLOYEES);
+  const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>(INITIAL_PENDING_REQUESTS);
+  const [activeTab, setActiveTab] = useState<'directory' | 'pending'>('directory');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedDept, setSelectedDept] = useState<string>('All');
@@ -188,7 +219,7 @@ export default function AdminUsers() {
   const [newPassword, setNewPassword] = useState<string>('PhishGuard@2026');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // ── Fetch Employees from Supabase / API ──────────────────────────────────────
+  // ── Fetch Employees & Pending Requests from Supabase / API ─────────────────
   const loadEmployees = async () => {
     setIsLoading(true);
     try {
@@ -197,13 +228,25 @@ export default function AdminUsers() {
       if (apiRes && apiRes.ok) {
         const data = await apiRes.json();
         if (Array.isArray(data) && data.length > 0) {
-          setEmployees(data);
+          const active = data.filter((u: any) => u.is_active);
+          const pending = data.filter((u: any) => !u.is_active);
+          if (active.length > 0) setEmployees(active);
+          if (pending.length > 0) {
+            setPendingRequests(pending.map((p: any) => ({
+              id: p.id,
+              first_name: p.first_name || 'New',
+              last_name: p.last_name || 'Employee',
+              email: p.email,
+              department_name: p.department_name || 'Engineering',
+              requested_at: 'Recently'
+            })));
+          }
           setIsLoading(false);
           return;
         }
       }
 
-      // 2. Try Supabase
+      // 2. Query Supabase
       const { data, error } = await supabase
         .from('users')
         .select(`
@@ -220,21 +263,41 @@ export default function AdminUsers() {
         .order('id', { ascending: true });
 
       if (!error && data && data.length > 0) {
-        const mapped: EmployeeRecord[] = data.map((u: any, idx: number) => ({
-          id: u.id,
-          first_name: u.first_name || u.email.split('@')[0],
-          last_name: u.last_name || 'Member',
-          email: u.email,
-          department_name: u.departments?.name || (idx % 2 === 0 ? 'Engineering' : 'Sales'),
-          role_name: u.is_admin ? 'Admin' : 'Employee',
-          is_admin: Boolean(u.is_admin),
-          is_active: Boolean(u.is_active ?? true),
-          risk_score: Math.floor(Math.random() * 30) + 70,
-          click_rate: Math.floor(Math.random() * 15),
-          report_rate: Math.floor(Math.random() * 25) + 75,
-          joined_date: u.created_at ? u.created_at.split('T')[0] : '2026-02-01'
-        }));
-        setEmployees(mapped);
+        const activeUsers: EmployeeRecord[] = [];
+        const pendingUsers: PendingRequest[] = [];
+
+        data.forEach((u: any, idx: number) => {
+          if (u.is_active !== false) {
+            activeUsers.push({
+              id: u.id,
+              first_name: u.first_name || u.email.split('@')[0],
+              last_name: u.last_name || 'Member',
+              email: u.email,
+              department_name: u.departments?.name || (idx % 2 === 0 ? 'Engineering' : 'Sales'),
+              role_name: u.is_admin ? 'Admin' : 'Employee',
+              is_admin: Boolean(u.is_admin),
+              is_active: true,
+              risk_score: Math.floor(Math.random() * 30) + 70,
+              click_rate: Math.floor(Math.random() * 15),
+              report_rate: Math.floor(Math.random() * 25) + 75,
+              joined_date: u.created_at ? u.created_at.split('T')[0] : '2026-02-01'
+            });
+          } else {
+            pendingUsers.push({
+              id: u.id,
+              first_name: u.first_name || u.email.split('@')[0],
+              last_name: u.last_name || 'Applicant',
+              email: u.email,
+              department_name: u.departments?.name || 'Engineering',
+              requested_at: u.created_at ? u.created_at.split('T')[0] : 'Recently'
+            });
+          }
+        });
+
+        if (activeUsers.length > 0) setEmployees(activeUsers);
+        if (pendingUsers.length > 0) {
+          setPendingRequests(prev => [...pendingUsers, ...prev.filter(p => !pendingUsers.some(pu => pu.email === p.email))]);
+        }
       }
     } catch (err) {
       console.warn('Error fetching employees:', err);
@@ -246,6 +309,68 @@ export default function AdminUsers() {
   useEffect(() => {
     loadEmployees();
   }, []);
+
+  // ── Approve Pending Request ──────────────────────────────────────────────────
+  const handleApproveRequest = async (req: PendingRequest) => {
+    try {
+      // Update Supabase
+      await supabase
+        .from('users')
+        .update({ is_active: true })
+        .eq('email', req.email)
+        .catch(() => null);
+
+      // Remove from pending
+      setPendingRequests(prev => prev.filter(p => p.id !== req.id));
+
+      // Add to active employees list
+      const approvedEmp: EmployeeRecord = {
+        id: req.id || Date.now(),
+        first_name: req.first_name,
+        last_name: req.last_name,
+        email: req.email,
+        department_name: req.department_name,
+        role_name: 'Employee',
+        is_admin: false,
+        is_active: true,
+        risk_score: 92,
+        click_rate: 5,
+        report_rate: 92,
+        joined_date: new Date().toISOString().split('T')[0]
+      };
+
+      setEmployees(prev => [approvedEmp, ...prev]);
+
+      addToast({
+        title: 'Joining Request Approved! 🎉',
+        description: `${req.first_name} ${req.last_name} (${req.email}) has been approved and added to your organization staff directory.`,
+        type: 'success'
+      });
+    } catch {
+      addToast({ title: 'Approval Error', description: 'Could not approve joining request.', type: 'error' });
+    }
+  };
+
+  // ── Reject Pending Request ───────────────────────────────────────────────────
+  const handleRejectRequest = async (req: PendingRequest) => {
+    try {
+      await supabase
+        .from('users')
+        .delete()
+        .eq('email', req.email)
+        .catch(() => null);
+
+      setPendingRequests(prev => prev.filter(p => p.id !== req.id));
+
+      addToast({
+        title: 'Request Rejected',
+        description: `${req.first_name} ${req.last_name}'s request to join was declined.`,
+        type: 'info'
+      });
+    } catch {
+      addToast({ title: 'Rejection Error', description: 'Could not reject request.', type: 'error' });
+    }
+  };
 
   // ── Department List ────────────────────────────────────────────────────────
   const departmentsList = useMemo(() => {
@@ -348,7 +473,7 @@ export default function AdminUsers() {
             </span>
           </div>
           <p className="mt-1 text-sm text-slate-400">
-            Manage organization members, security risk bands, and security awareness training status.
+            Manage organization members, approve joining requests, and monitor security risk bands.
           </p>
         </div>
 
@@ -361,14 +486,17 @@ export default function AdminUsers() {
           >
             <RefreshCw size={16} className={isLoading ? 'animate-spin text-blue-400' : ''} />
           </button>
-          
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-xs shadow-lg shadow-blue-500/25 transition-all hover:scale-[1.02] active:scale-[0.98]"
-          >
-            <Plus size={16} />
-            <span>Add Employee</span>
-          </button>
+
+          {/* Add Employee Button: Only shown if user is Org Admin */}
+          {user?.is_admin && (
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-xs shadow-lg shadow-blue-500/25 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <Plus size={16} />
+              <span>Add Employee</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -385,6 +513,19 @@ export default function AdminUsers() {
             </div>
           </div>
           <p className="text-xs text-slate-500 mt-2">Active members in database</p>
+        </Card>
+
+        <Card className="border border-slate-800 bg-slate-900/60 p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Joining Requests</p>
+              <h3 className="text-2xl font-bold text-amber-400 mt-1">{pendingRequests.length}</h3>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20">
+              <Clock size={20} />
+            </div>
+          </div>
+          <p className="text-xs text-amber-400/80 mt-2">Pending admin approval</p>
         </Card>
 
         <Card className="border border-slate-800 bg-slate-900/60 p-5">
@@ -412,213 +553,314 @@ export default function AdminUsers() {
           </div>
           <p className="text-xs text-rose-400/80 mt-2">Requires phishing training</p>
         </Card>
-
-        <Card className="border border-slate-800 bg-slate-900/60 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Avg Security Score</p>
-              <h3 className="text-2xl font-bold text-blue-400 mt-1">{stats.avgScore} / 100</h3>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
-              <Shield size={20} />
-            </div>
-          </div>
-          <p className="text-xs text-slate-500 mt-2">Organization-wide index</p>
-        </Card>
       </div>
 
-      {/* Filter & Search Toolbar */}
-      <Card className="border border-slate-800 bg-slate-900/50 p-4">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          
-          {/* Search Input */}
-          <div className="relative w-full md:w-80">
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by name, email, department..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-slate-950/80 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 transition-colors"
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
-                <X size={14} />
-              </button>
-            )}
-          </div>
+      {/* Navigation Tabs (Active Staff Directory vs Pending Join Requests) */}
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+        <button
+          onClick={() => setActiveTab('directory')}
+          className={`px-4 py-2 rounded-xl font-semibold text-xs transition-all flex items-center gap-2 ${
+            activeTab === 'directory'
+              ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
+              : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+          }`}
+        >
+          <Users size={14} />
+          <span>Active Staff Directory ({employees.length})</span>
+        </button>
 
-          {/* Department & Risk Filters */}
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            <div className="flex items-center gap-2 bg-slate-950/80 border border-slate-800 px-3 py-1.5 rounded-xl">
-              <Building2 size={14} className="text-slate-400" />
-              <span className="text-xs text-slate-400 font-medium">Dept:</span>
-              <select
-                value={selectedDept}
-                onChange={(e) => setSelectedDept(e.target.value)}
-                className="bg-transparent text-xs text-white font-medium focus:outline-none cursor-pointer"
-              >
-                {departmentsList.map(dept => (
-                  <option key={dept} value={dept} className="bg-slate-900 text-white">{dept}</option>
-                ))}
-              </select>
+        <button
+          onClick={() => setActiveTab('pending')}
+          className={`px-4 py-2 rounded-xl font-semibold text-xs transition-all flex items-center gap-2 relative ${
+            activeTab === 'pending'
+              ? 'bg-amber-600 text-white shadow-lg shadow-amber-500/20'
+              : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+          }`}
+        >
+          <Clock size={14} />
+          <span>Pending Join Requests</span>
+          {pendingRequests.length > 0 && (
+            <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-bold text-[10px] animate-pulse">
+              {pendingRequests.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Directory Tab Content */}
+      {activeTab === 'directory' && (
+        <>
+          {/* Filter & Search Toolbar */}
+          <Card className="border border-slate-800 bg-slate-900/50 p-4">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+              
+              {/* Search Input */}
+              <div className="relative w-full md:w-80">
+                <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search by name, email, department..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-slate-950/80 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 transition-colors"
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
+              {/* Department & Risk Filters */}
+              <div className="flex items-center gap-3 w-full md:w-auto">
+                <div className="flex items-center gap-2 bg-slate-950/80 border border-slate-800 px-3 py-1.5 rounded-xl">
+                  <Building2 size={14} className="text-slate-400" />
+                  <span className="text-xs text-slate-400 font-medium">Dept:</span>
+                  <select
+                    value={selectedDept}
+                    onChange={(e) => setSelectedDept(e.target.value)}
+                    className="bg-transparent text-xs text-white font-medium focus:outline-none cursor-pointer"
+                  >
+                    {departmentsList.map(dept => (
+                      <option key={dept} value={dept} className="bg-slate-900 text-white">{dept}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2 bg-slate-950/80 border border-slate-800 px-3 py-1.5 rounded-xl">
+                  <Filter size={14} className="text-slate-400" />
+                  <span className="text-xs text-slate-400 font-medium">Risk:</span>
+                  <select
+                    value={selectedRisk}
+                    onChange={(e) => setSelectedRisk(e.target.value)}
+                    className="bg-transparent text-xs text-white font-medium focus:outline-none cursor-pointer"
+                  >
+                    <option value="All" className="bg-slate-900 text-white">All Tiers</option>
+                    <option value="Low" className="bg-slate-900 text-emerald-400">Low Risk (&gt;88%)</option>
+                    <option value="Medium" className="bg-slate-900 text-amber-400">Medium Risk (70-87%)</option>
+                    <option value="High" className="bg-slate-900 text-rose-400">High Risk (&lt;70%)</option>
+                  </select>
+                </div>
+              </div>
             </div>
+          </Card>
 
-            <div className="flex items-center gap-2 bg-slate-950/80 border border-slate-800 px-3 py-1.5 rounded-xl">
-              <Filter size={14} className="text-slate-400" />
-              <span className="text-xs text-slate-400 font-medium">Risk:</span>
-              <select
-                value={selectedRisk}
-                onChange={(e) => setSelectedRisk(e.target.value)}
-                className="bg-transparent text-xs text-white font-medium focus:outline-none cursor-pointer"
-              >
-                <option value="All" className="bg-slate-900 text-white">All Tiers</option>
-                <option value="Low" className="bg-slate-900 text-emerald-400">Low Risk (&gt;88%)</option>
-                <option value="Medium" className="bg-slate-900 text-amber-400">Medium Risk (70-87%)</option>
-                <option value="High" className="bg-slate-900 text-rose-400">High Risk (&lt;70%)</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* Employees Directory Table */}
-      <Card className="border border-slate-800 bg-slate-900/40 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-slate-800 bg-slate-950/80 text-slate-400 font-semibold uppercase tracking-wider">
-                <th className="py-3.5 px-4">Employee Member</th>
-                <th className="py-3.5 px-4">Department</th>
-                <th className="py-3.5 px-4">Role Tier</th>
-                <th className="py-3.5 px-4">Security Score</th>
-                <th className="py-3.5 px-4 text-center">Simulation Stats</th>
-                <th className="py-3.5 px-4">Status</th>
-                <th className="py-3.5 px-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60">
-              {filteredEmployees.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
-                    <div className="w-12 h-12 rounded-full bg-slate-800/50 flex items-center justify-center mx-auto mb-3 text-slate-500">
-                      <Users size={24} />
-                    </div>
-                    <p className="text-sm font-semibold text-white">No Employees Found</p>
-                    <p className="text-xs text-slate-500 mt-1">Try adjusting search filters or add a new employee.</p>
-                  </td>
-                </tr>
-              ) : (
-                filteredEmployees.map((emp) => {
-                  const initials = `${emp.first_name[0] || ''}${emp.last_name[0] || ''}`.toUpperCase();
-                  const isHighRisk = emp.risk_score < 70;
-                  const isMediumRisk = emp.risk_score >= 70 && emp.risk_score < 88;
-
-                  return (
-                    <tr key={emp.id} className="hover:bg-slate-800/30 transition-colors group">
-                      
-                      {/* Name & Avatar */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shadow-md ${
-                            emp.is_admin 
-                              ? 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white' 
-                              : 'bg-slate-800 text-slate-300 border border-slate-700'
-                          }`}>
-                            {initials}
-                          </div>
-                          <div>
-                            <p className="font-semibold text-white text-sm group-hover:text-blue-400 transition-colors">
-                              {emp.first_name} {emp.last_name}
-                            </p>
-                            <div className="flex items-center gap-1.5 text-slate-400 text-xs mt-0.5">
-                              <Mail size={12} className="text-slate-500" />
-                              <span>{emp.email}</span>
-                            </div>
-                          </div>
+          {/* Employees Directory Table */}
+          <Card className="border border-slate-800 bg-slate-900/40 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 bg-slate-950/80 text-slate-400 font-semibold uppercase tracking-wider">
+                    <th className="py-3.5 px-4">Employee Member</th>
+                    <th className="py-3.5 px-4">Department</th>
+                    <th className="py-3.5 px-4">Role Tier</th>
+                    <th className="py-3.5 px-4">Security Score</th>
+                    <th className="py-3.5 px-4 text-center">Simulation Stats</th>
+                    <th className="py-3.5 px-4">Status</th>
+                    <th className="py-3.5 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {filteredEmployees.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-slate-400">
+                        <div className="w-12 h-12 rounded-full bg-slate-800/50 flex items-center justify-center mx-auto mb-3 text-slate-500">
+                          <Users size={24} />
                         </div>
+                        <p className="text-sm font-semibold text-white">No Employees Found</p>
+                        <p className="text-xs text-slate-500 mt-1">Try adjusting search filters or add a new employee.</p>
                       </td>
-
-                      {/* Department */}
-                      <td className="py-3.5 px-4">
-                        <span className="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 font-medium text-xs">
-                          {emp.department_name}
-                        </span>
-                      </td>
-
-                      {/* Role Tier */}
-                      <td className="py-3.5 px-4">
-                        {emp.is_admin ? (
-                          <span className="px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 font-semibold text-xs inline-flex items-center gap-1">
-                            <Shield size={12} />
-                            Org Admin
-                          </span>
-                        ) : (
-                          <span className="px-2.5 py-1 rounded-lg bg-slate-800/60 text-slate-400 border border-slate-700/50 font-medium text-xs">
-                            Employee
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Security Score */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-2.5 h-2.5 rounded-full ${
-                            isHighRisk ? 'bg-rose-500 animate-pulse' : isMediumRisk ? 'bg-amber-500' : 'bg-emerald-500'
-                          }`} />
-                          <span className={`font-bold text-sm ${
-                            isHighRisk ? 'text-rose-400' : isMediumRisk ? 'text-amber-400' : 'text-emerald-400'
-                          }`}>
-                            {emp.risk_score} / 100
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Simulation Stats */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center justify-center gap-4 text-xs">
-                          <div className="text-center">
-                            <span className="block font-semibold text-rose-400">{emp.click_rate}%</span>
-                            <span className="text-[10px] text-slate-500 uppercase">Click</span>
-                          </div>
-                          <div className="w-px h-5 bg-slate-800" />
-                          <div className="text-center">
-                            <span className="block font-semibold text-emerald-400">{emp.report_rate}%</span>
-                            <span className="text-[10px] text-slate-500 uppercase">Report</span>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-3.5 px-4">
-                        <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
-                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                          Active
-                        </span>
-                      </td>
-
-                      {/* Actions */}
-                      <td className="py-3.5 px-4 text-right">
-                        <button
-                          onClick={() => addToast({ title: 'Employee Audit', description: `Viewing risk audit for ${emp.first_name} ${emp.last_name}`, type: 'info' })}
-                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-all inline-flex items-center gap-1"
-                        >
-                          <span>Audit</span>
-                          <ChevronRight size={14} />
-                        </button>
-                      </td>
-
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+                  ) : (
+                    filteredEmployees.map((emp) => {
+                      const initials = `${emp.first_name[0] || ''}${emp.last_name[0] || ''}`.toUpperCase();
+                      const isHighRisk = emp.risk_score < 70;
+                      const isMediumRisk = emp.risk_score >= 70 && emp.risk_score < 88;
 
-      {/* Add Employee Modal */}
-      {isAddModalOpen && (
+                      return (
+                        <tr key={emp.id} className="hover:bg-slate-800/30 transition-colors group">
+                          
+                          {/* Name & Avatar */}
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shadow-md ${
+                                emp.is_admin 
+                                  ? 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white' 
+                                  : 'bg-slate-800 text-slate-300 border border-slate-700'
+                              }`}>
+                                {initials}
+                              </div>
+                              <div>
+                                <p className="font-semibold text-white text-sm group-hover:text-blue-400 transition-colors">
+                                  {emp.first_name} {emp.last_name}
+                                </p>
+                                <div className="flex items-center gap-1.5 text-slate-400 text-xs mt-0.5">
+                                  <Mail size={12} className="text-slate-500" />
+                                  <span>{emp.email}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Department */}
+                          <td className="py-3.5 px-4">
+                            <span className="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 font-medium text-xs">
+                              {emp.department_name}
+                            </span>
+                          </td>
+
+                          {/* Role Tier */}
+                          <td className="py-3.5 px-4">
+                            {emp.is_admin ? (
+                              <span className="px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 font-semibold text-xs inline-flex items-center gap-1">
+                                <Shield size={12} />
+                                Org Admin
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-1 rounded-lg bg-slate-800/60 text-slate-400 border border-slate-700/50 font-medium text-xs">
+                                Employee
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Security Score */}
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-2.5 h-2.5 rounded-full ${
+                                isHighRisk ? 'bg-rose-500 animate-pulse' : isMediumRisk ? 'bg-amber-500' : 'bg-emerald-500'
+                              }`} />
+                              <span className={`font-bold text-sm ${
+                                isHighRisk ? 'text-rose-400' : isMediumRisk ? 'text-amber-400' : 'text-emerald-400'
+                              }`}>
+                                {emp.risk_score} / 100
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Simulation Stats */}
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center justify-center gap-4 text-xs">
+                              <div className="text-center">
+                                <span className="block font-semibold text-rose-400">{emp.click_rate}%</span>
+                                <span className="text-[10px] text-slate-500 uppercase">Click</span>
+                              </div>
+                              <div className="w-px h-5 bg-slate-800" />
+                              <div className="text-center">
+                                <span className="block font-semibold text-emerald-400">{emp.report_rate}%</span>
+                                <span className="text-[10px] text-slate-500 uppercase">Report</span>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Status */}
+                          <td className="py-3.5 px-4">
+                            <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
+                              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                              Active
+                            </span>
+                          </td>
+
+                          {/* Actions */}
+                          <td className="py-3.5 px-4 text-right">
+                            <button
+                              onClick={() => addToast({ title: 'Employee Audit', description: `Viewing risk audit for ${emp.first_name} ${emp.last_name}`, type: 'info' })}
+                              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-all inline-flex items-center gap-1"
+                            >
+                              <span>Audit</span>
+                              <ChevronRight size={14} />
+                            </button>
+                          </td>
+
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </>
+      )}
+
+      {/* Pending Join Requests Tab Content */}
+      {activeTab === 'pending' && (
+        <Card className="border border-slate-800 bg-slate-900/40 overflow-hidden">
+          <CardHeader className="border-b border-slate-800 bg-slate-950/60 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base text-white flex items-center gap-2">
+                  <Clock size={18} className="text-amber-400" /> Pending Employee Joining Requests
+                </CardTitle>
+                <CardDescription className="text-xs text-slate-400 mt-0.5">
+                  Review and approve or reject candidates requesting to join your organization.
+                </CardDescription>
+              </div>
+              <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-bold">
+                {pendingRequests.length} Pending
+              </span>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="divide-y divide-slate-800/60">
+              {pendingRequests.length === 0 ? (
+                <div className="py-16 text-center text-slate-400">
+                  <div className="w-12 h-12 rounded-full bg-slate-800/50 flex items-center justify-center mx-auto mb-3 text-slate-500">
+                    <CheckCircle2 size={24} className="text-emerald-400" />
+                  </div>
+                  <p className="text-sm font-semibold text-white">All Clear! No Pending Requests</p>
+                  <p className="text-xs text-slate-500 mt-1">All employee joining applications have been processed.</p>
+                </div>
+              ) : (
+                pendingRequests.map((req) => (
+                  <div key={req.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-800/30 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center font-bold text-sm">
+                        {req.first_name[0]}{req.last_name[0]}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-white text-sm">
+                          {req.first_name} {req.last_name}
+                        </p>
+                        <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
+                          <Mail size={12} className="text-slate-500" />
+                          <span>{req.email}</span>
+                          <span className="text-slate-600">•</span>
+                          <Building2 size={12} className="text-slate-500" />
+                          <span className="text-slate-300">{req.department_name}</span>
+                          <span className="text-slate-600">•</span>
+                          <span className="text-amber-400/90 font-medium">{req.requested_at}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Approve & Reject Action Buttons */}
+                    <div className="flex items-center gap-3 self-end sm:self-center">
+                      <button
+                        onClick={() => handleRejectRequest(req)}
+                        className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/30 text-slate-400 hover:text-rose-400 text-xs font-semibold transition-all inline-flex items-center gap-1.5"
+                      >
+                        <UserX size={14} />
+                        <span>Reject</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleApproveRequest(req)}
+                        className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold shadow-lg shadow-emerald-500/20 transition-all hover:scale-105 active:scale-95 inline-flex items-center gap-1.5"
+                      >
+                        <CheckCircle2 size={14} />
+                        <span>Approve Request</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Add Employee Modal (Admin Only) */}
+      {isAddModalOpen && user?.is_admin && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="max-w-md w-full rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl p-6 relative">
             <button

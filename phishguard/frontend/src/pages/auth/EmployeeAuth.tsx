@@ -214,7 +214,7 @@ export default function EmployeeAuth() {
         .single();
       if (roleRow) roleId = (roleRow as { id: number }).id;
 
-      // 3. Create user profile row linking auth uid -> org
+      // 3. Create user profile row with pending status (is_active: false) for Admin Approval
       await supabase.from('users').insert({
         supabase_uid: supabaseUid,
         email: email.trim(),
@@ -222,26 +222,32 @@ export default function EmployeeAuth() {
         last_name: lastName.trim(),
         organization_id: selectedOrg.id,
         is_admin: false,
-        is_active: true,
+        is_active: false,
         role_id: roleId,
       });
 
-      addToast({ title: 'Account Created! 🎉', description: 'Logging you in automatically...', type: 'success' });
+      // 4. Send joining request notification to organization admin
+      await supabase.from('notifications').insert({
+        user_id: selectedOrg.id,
+        type: 'join_request',
+        payload: {
+          title: 'New Joining Request',
+          message: `${firstName.trim()} ${lastName.trim()} (${email.trim()}) requested to join ${selectedOrg.name}.`,
+          email: email.trim(),
+          name: `${firstName.trim()} ${lastName.trim()}`,
+          org_id: selectedOrg.id,
+        },
+        read: false,
+      }).catch(() => null);
 
-      // 4. Auto login
-      const loginResult = await login(email.trim(), password);
+      addToast({
+        title: 'Joining Request Submitted! ⏳',
+        description: `Your request to join ${selectedOrg.name} has been sent to the organization admin for approval.`,
+        type: 'info',
+      });
+
       setIsLoading(false);
-
-      if (loginResult.ok) {
-        navigate('/dashboard', { replace: true });
-      } else {
-        addToast({
-          title: 'Confirm Your Email',
-          description: 'Check your inbox and confirm your email address, then sign in.',
-          type: 'info',
-        });
-        setMode('signin');
-      }
+      setMode('signin');
     } catch {
       setIsLoading(false);
       addToast({ title: 'Connection Error', description: 'Could not connect to authentication server.', type: 'error' });

@@ -153,14 +153,7 @@ Here are essential recommendations:
   return (
     <>
       {/* Floating Action Button (Bottom Right) */}
-      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2">
-        {!isOpen && (
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-900/90 border border-blue-500/30 text-blue-400 text-xs font-semibold shadow-lg backdrop-blur-md animate-bounce">
-            <Sparkles size={14} className="text-blue-400" />
-            <span>Ask PhishGuard AI</span>
-          </div>
-        )}
-
+      <div className="fixed bottom-6 right-6 z-50">
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="relative w-14 h-14 rounded-full bg-gradient-to-tr from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white flex items-center justify-center shadow-2xl shadow-blue-500/40 hover:scale-105 active:scale-95 transition-all duration-200 focus:outline-none border border-blue-400/30 group"

@@ -7,5 +7,14 @@ export default defineConfig({
   server: {
     port: 3000,
     host: '0.0.0.0',
-  }
+    proxy: {
+      // All /api/* requests are proxied to the FastAPI backend
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+        secure: false,
+      },
+    },
+  },
 })

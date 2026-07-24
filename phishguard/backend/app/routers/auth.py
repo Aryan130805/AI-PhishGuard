@@ -16,7 +16,10 @@ from app.models.user import User
 from app.models.organization import Organization
 from app.models.role import Role
 from app.models.refresh_token import RefreshToken
-from app.schemas import UserRegister, UserLogin, TokenResponse, RefreshRequest, TokenRefreshResponse
+from app.schemas import (
+    UserRegister, UserLogin, TokenResponse, RefreshRequest, TokenRefreshResponse,
+    EmployeeRegister, OrganizationRegister
+)
 from app.config import settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -45,18 +48,117 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
         
     # Check if organization already exists, or create it
     org = db.query(Organization).filter(Organization.name == payload.organization_name).first()
+    is_new_org = False
     if not org:
         org = Organization(name=payload.organization_name)
         db.add(org)
         db.commit()
         db.refresh(org)
+        is_new_org = True
         
     # Ensure roles are seeded
     admin_role = get_or_create_role(db, "admin")
-    get_or_create_role(db, "employee") # Make sure employee role is seeded too
+    employee_role = get_or_create_role(db, "employee")
     
-    # Create the user
+    # First user in a new org becomes admin; users joining an existing org become employees
+    assigned_role = admin_role if is_new_org else employee_role
+    is_admin_flag = is_new_org
+    
     hashed_pwd = get_password_hash(payload.password)
+    user = User(
+        email=payload.email,
+        hashed_password=hashed_pwd,
+        organization_id=org.id,
+        role_id=assigned_role.id,
+        is_admin=is_admin_flag
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    
+    return {"message": "Registration successful", "user_id": user.id}
+
+
+@router.post("/register-employee", status_code=status.HTTP_201_CREATED)
+def register_employee(payload: EmployeeRegister, db: Session = Depends(get_db)):
+    # Check if user already exists
+    existing_user = db.query(User).filter(User.email == payload.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+        
+    # Check if specified organization exists and is verified
+    org = db.query(Organization).filter(Organization.id == payload.organization_id).first()
+    if not org:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Selected organization does not exist. Please contact your administrator."
+        )
+    if hasattr(org, 'is_verified') and not org.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Selected organization is inactive or pending verification."
+        )
+        
+    employee_role = get_or_create_role(db, "employee")
+    hashed_pwd = get_password_hash(payload.password)
+    
+    user = User(
+        email=payload.email,
+        hashed_password=hashed_pwd,
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        organization_id=org.id,
+        role_id=employee_role.id,
+        is_admin=False
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    
+    return {"message": "Employee registration successful", "user_id": user.id}
+
+
+@router.post("/register-organization", status_code=status.HTTP_201_CREATED)
+def register_organization(payload: OrganizationRegister, db: Session = Depends(get_db)):
+    # Check if organization name is already taken
+    existing_org = db.query(Organization).filter(Organization.name == payload.name.strip()).first()
+    if existing_org:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An organization with this name already exists."
+        )
+
+    # Check if admin email already registered
+    existing_user = db.query(User).filter(User.email == payload.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email address is already registered."
+        )
+
+    # Create Organization
+    org = Organization(
+        name=payload.name.strip(),
+        industry=payload.industry,
+        company_size=payload.company_size,
+        website=payload.website,
+        country=payload.country,
+        state=payload.state,
+        city=payload.city,
+        logo_url=payload.logo_url,
+        is_verified=True
+    )
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    # Create Admin User
+    admin_role = get_or_create_role(db, "admin")
+    hashed_pwd = get_password_hash(payload.password)
+    
     user = User(
         email=payload.email,
         hashed_password=hashed_pwd,
@@ -67,8 +169,8 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
-    
-    return {"message": "Registration successful", "user_id": user.id}
+
+    return {"message": "Organization created successfully", "org_id": org.id, "user_id": user.id}
 
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 

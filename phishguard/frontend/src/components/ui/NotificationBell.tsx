@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Bell, Check, ExternalLink, Mail, ShieldAlert, BookOpen, Award, Sparkles } from 'lucide-react';
+import { apiFetch } from '../../lib/api';
 
 interface NotificationItem {
   id: number;
@@ -17,38 +18,23 @@ interface NotificationBellProps {
   role: 'admin' | 'employee';
 }
 
-const API_BASE = 'http://localhost:8000';
-
 export default function NotificationBell({ role }: NotificationBellProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const tokenKey = role === 'admin' ? 'token' : 'employee_token';
-  const historyLink = role === 'admin' ? '/admin/notifications' : '/employee/notifications';
-
-  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
-    const token = localStorage.getItem(tokenKey);
-    return fetch(url, {
-      ...options,
-      headers: {
-        ...options.headers,
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-  };
+  const historyLink = role === 'admin' ? '/admin/notifications' : '/notifications';
 
   const loadNotifications = async () => {
     try {
-      const res = await fetchWithAuth(`${API_BASE}/notifications`);
+      const res = await apiFetch('/notifications');
       if (res.ok) {
         const data = await res.json();
         setNotifications(data);
       }
-      
-      const countRes = await fetchWithAuth(`${API_BASE}/notifications/unread-count`);
+
+      const countRes = await apiFetch('/notifications/unread-count');
       if (countRes.ok) {
         const countData = await countRes.json();
         setUnreadCount(countData.unread);
@@ -79,12 +65,8 @@ export default function NotificationBell({ role }: NotificationBellProps) {
   const handleMarkAsRead = async (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      const res = await fetchWithAuth(`${API_BASE}/notifications/${id}/read`, {
-        method: 'POST',
-      });
-      if (res.ok) {
-        loadNotifications();
-      }
+      const res = await apiFetch(`/notifications/${id}/read`, { method: 'POST' });
+      if (res.ok) loadNotifications();
     } catch (err) {
       console.error('Error marking notification as read:', err);
     }
@@ -92,12 +74,8 @@ export default function NotificationBell({ role }: NotificationBellProps) {
 
   const handleMarkAllRead = async () => {
     try {
-      const res = await fetchWithAuth(`${API_BASE}/notifications/read-all`, {
-        method: 'POST',
-      });
-      if (res.ok) {
-        loadNotifications();
-      }
+      const res = await apiFetch('/notifications/read-all', { method: 'POST' });
+      if (res.ok) loadNotifications();
     } catch (err) {
       console.error('Error marking all as read:', err);
     }

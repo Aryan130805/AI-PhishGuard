@@ -75,3 +75,33 @@ class CampaignUpdate(BaseModel):
 class CampaignSchedule(BaseModel):
     scheduled_at: datetime
 
+
+class OrganizationPublic(BaseModel):
+    id: int
+    name: str
+    logo_url: Optional[str] = None
+    industry: Optional[str] = None
+    is_verified: bool = True
+
+    class Config:
+        from_attributes = True
+
+class EmployeeRegister(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: EmailStr
+    password: str
+    organization_id: int
+
+class OrganizationRegister(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+    industry: Optional[str] = None
+    company_size: Optional[str] = None
+    website: Optional[str] = None
+    country: Optional[str] = None
+    state: Optional[str] = None
+    city: Optional[str] = None
+    logo_url: Optional[str] = None
+

@@ -8,7 +8,7 @@ import redis
 
 from app.logging_config import setup_logging, LoggingMiddleware
 from app.exceptions import add_exception_handlers
-from app.routers import auth, users, campaigns, templates, tracking, extension, analytics, risk, training, notifications, reports
+from app.routers import auth, users, campaigns, templates, tracking, extension, analytics, risk, training, notifications, reports, organizations
 
 def create_app() -> FastAPI:
     # Setup structured logging configuration
@@ -50,6 +50,39 @@ def create_app() -> FastAPI:
     app.include_router(training.cert_router)
     app.include_router(notifications.router)
     app.include_router(reports.router)
+    app.include_router(organizations.router)
+
+    @app.on_event("startup")
+    def sync_db_columns():
+        try:
+            from app.database import engine
+            from sqlalchemy import inspect
+            inspector = inspect(engine)
+            with engine.connect() as conn:
+                if "organizations" in inspector.get_table_names():
+                    cols = [c["name"] for c in inspector.get_columns("organizations")]
+                    org_cols = [
+                        ("industry", "VARCHAR"),
+                        ("company_size", "VARCHAR"),
+                        ("website", "VARCHAR"),
+                        ("country", "VARCHAR"),
+                        ("state", "VARCHAR"),
+                        ("city", "VARCHAR"),
+                        ("logo_url", "VARCHAR"),
+                        ("is_verified", "BOOLEAN DEFAULT 1"),
+                    ]
+                    for col_name, col_type in org_cols:
+                        if col_name not in cols:
+                            conn.execute(text(f"ALTER TABLE organizations ADD COLUMN {col_name} {col_type}"))
+                if "users" in inspector.get_table_names():
+                    cols = [c["name"] for c in inspector.get_columns("users")]
+                    if "first_name" not in cols:
+                        conn.execute(text("ALTER TABLE users ADD COLUMN first_name VARCHAR"))
+                    if "last_name" not in cols:
+                        conn.execute(text("ALTER TABLE users ADD COLUMN last_name VARCHAR"))
+                conn.commit()
+        except Exception as e:
+            print(f"Table sync warning: {e}")
 
     @app.get("/health")
     def health_check(db: Session = Depends(get_db)):

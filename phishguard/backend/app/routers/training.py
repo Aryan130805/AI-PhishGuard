@@ -454,6 +454,11 @@ def get_leaderboard(
     from app.models.risk import UserMetrics
     
     users_query = db.query(User).join(User.role).filter(User.role.has(name="employee"))
+    
+    # Filter leaderboard to only include employees in the SAME organization
+    if current_user.organization_id:
+        users_query = users_query.filter(User.organization_id == current_user.organization_id)
+        
     if department_id:
         users_query = users_query.filter(User.department_id == department_id)
         
@@ -462,7 +467,8 @@ def get_leaderboard(
     
     for u in users:
         metrics = db.query(UserMetrics).filter(UserMetrics.user_id == u.id).first()
-        report_rate = metrics.report_rate if metrics else 0.0
+        report_rate = metrics.report_rate if metrics else 0.85
+        click_rate = metrics.click_rate if metrics else 0.10
         
         total_assigned = db.query(LessonAssignment).filter(LessonAssignment.user_id == u.id).count()
         completed_lessons = db.query(LessonAssignment).filter(
@@ -470,16 +476,25 @@ def get_leaderboard(
             LessonAssignment.completed_at != None
         ).count()
         
-        quiz_pass_rate = completed_lessons / total_assigned if total_assigned > 0 else 0.0
-        composite_score = round((quiz_pass_rate * 0.5 + report_rate * 0.5) * 100, 1)
+        quiz_pass_rate = completed_lessons / total_assigned if total_assigned > 0 else 0.90
+        score_val = (quiz_pass_rate * 0.4 + report_rate * 0.4 + (1 - click_rate) * 0.2) * 100
+        composite_score = round(score_val, 1)
         
         dept_name = u.department.name if u.department else "General"
-        name = u.email.split('@')[0].capitalize()
+        
+        raw_handle = u.email.split('@')[0]
+        formatted_name = raw_handle.replace('.', ' ').replace('_', ' ').replace('-', ' ').title()
+        if formatted_name.lower() == 'admin':
+            formatted_name = 'Employee'
         
         leaderboard.append({
-            "name": name,
+            "id": u.id,
+            "name": formatted_name,
+            "email": u.email,
             "department": dept_name,
-            "composite_score": composite_score
+            "organization_name": u.organization.name if u.organization else "Organization",
+            "composite_score": composite_score,
+            "is_current_user": u.id == current_user.id
         })
         
     leaderboard.sort(key=lambda x: x["composite_score"], reverse=True)

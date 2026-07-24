@@ -138,12 +138,12 @@ export default function EmployeeQuiz() {
           <div className="pt-6 border-t border-slate-800 flex flex-wrap justify-center gap-4">
             {result.passed ? (
               <>
-                <Link to="/employee/certificates">
+                <Link to="/certificates">
                   <Button className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 flex items-center gap-2">
                     <Award size={18} /> View Certificates
                   </Button>
                 </Link>
-                <Link to="/employee/lessons">
+                <Link to="/lessons">
                   <Button variant="outline" className="border-slate-800 text-slate-300 hover:bg-slate-800 px-6 py-2.5">
                     Back to Curriculum
                   </Button>
@@ -154,7 +154,7 @@ export default function EmployeeQuiz() {
                 <Button onClick={fetchQuiz} className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-6 py-2.5 flex items-center gap-2">
                   <RefreshCw size={16} /> Try Checkup Again
                 </Button>
-                <Link to="/employee/lessons">
+                <Link to="/lessons">
                   <Button variant="outline" className="border-slate-800 text-slate-300 hover:bg-slate-800 px-6 py-2.5">
                     Review Lesson Material
                   </Button>

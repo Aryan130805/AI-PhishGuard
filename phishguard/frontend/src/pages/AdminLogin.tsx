@@ -4,10 +4,12 @@ import { Button } from '../components/ui/Button';
 import { Shield, Key, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../components/ui/Toast';
+import { useAuth } from '../AuthContext';
 
 export default function AdminLogin() {
   const navigate = useNavigate();
   const { addToast } = useToast();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -17,25 +19,25 @@ export default function AdminLogin() {
     if (!email || !password) return;
 
     setIsLoading(true);
-    try {
-      const res = await fetch('http://localhost:8000/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-        credentials: 'include'
-      });
+    const result = await login(email, password);
+    setIsLoading(false);
 
-      if (res.ok) {
+    if (result.ok) {
+      if (result.role === 'admin') {
         addToast({ title: 'Welcome Admin!', description: 'Logged in successfully.', type: 'success' });
-        navigate('/admin/dashboard');
+        navigate('/admin/dashboard', { replace: true });
       } else {
-        const errorData = await res.json();
-        addToast({ title: 'Login Failed', description: errorData.detail || 'Invalid credentials.', type: 'error' });
+        // Credentials are valid but this user is not an admin — deny access
+        addToast({
+          title: 'Access Denied',
+          description: 'This portal requires admin privileges.',
+          type: 'error'
+        });
+        // Log them out so no session lingers
+        await fetch('http://localhost:8000/auth/logout', { method: 'POST', credentials: 'include' });
       }
-    } catch (err) {
-      addToast({ title: 'Network Error', description: 'Could not connect to the backend server.', type: 'error' });
-    } finally {
-      setIsLoading(false);
+    } else {
+      addToast({ title: 'Login Failed', description: result.detail || 'Invalid credentials.', type: 'error' });
     }
   };
 
@@ -48,32 +50,26 @@ export default function AdminLogin() {
     };
 
     try {
-      // 1. Try to register
+      // 1. Try to register (idempotent)
       await fetch('http://localhost:8000/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(testAdmin),
         credentials: 'include'
       });
+    } catch { /* ignore */ }
 
-      // 2. Try to log in
-      const res = await fetch('http://localhost:8000/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: testAdmin.email, password: testAdmin.password }),
-        credentials: 'include'
-      });
+    // 2. Log in via context
+    const result = await login(testAdmin.email, testAdmin.password);
+    setIsLoading(false);
 
-      if (res.ok) {
-        addToast({ title: 'Admin Seeding Active', description: 'Logged in as test admin.', type: 'success' });
-        navigate('/admin/dashboard');
-      } else {
-        addToast({ title: 'Auto Login Failed', description: 'Failed to authenticate seeded admin.', type: 'error' });
-      }
-    } catch (err) {
-      addToast({ title: 'Connection Error', description: 'Could not communicate with training API.', type: 'error' });
-    } finally {
-      setIsLoading(false);
+    if (result.ok && result.role === 'admin') {
+      addToast({ title: 'Admin Seeding Active', description: 'Logged in as test admin.', type: 'success' });
+      navigate('/admin/dashboard', { replace: true });
+    } else if (result.ok) {
+      addToast({ title: 'Access Denied', description: 'Seeded user does not have admin privileges.', type: 'error' });
+    } else {
+      addToast({ title: 'Auto Login Failed', description: result.detail || 'Failed to authenticate seeded admin.', type: 'error' });
     }
   };
 
@@ -143,8 +139,18 @@ export default function AdminLogin() {
             onClick={handleAutoSeed}
             disabled={isLoading}
           >
-            Seed Test Admin & Login
+            Seed Test Admin &amp; Login
           </Button>
+
+          <div className="text-center pt-2">
+            <button
+              type="button"
+              onClick={() => navigate('/login')}
+              className="text-xs text-slate-400 hover:text-blue-400 underline transition-colors"
+            >
+              Switch to Employee Login Portal
+            </button>
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -4,6 +4,7 @@ import { Button } from '../components/ui/Button';
 import { BookOpen, CheckCircle, ArrowRight, BookOpenCheck, HelpCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useToast } from '../components/ui/Toast';
+import { apiFetch } from '../lib/api';
 
 interface LessonItem {
   id: number;
@@ -39,13 +40,7 @@ export default function EmployeeLessons() {
   const fetchLessons = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('employee_token');
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch('http://localhost:8000/training/lessons', {
-        headers,
-        credentials: 'include'
-      });
+      const res = await apiFetch('/training/lessons');
       if (res.ok) {
         const data = await res.json();
         setLessons(data);
@@ -61,13 +56,7 @@ export default function EmployeeLessons() {
 
   const handleSelectLesson = async (lessonId: number) => {
     try {
-      const token = localStorage.getItem('employee_token');
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch(`http://localhost:8000/training/lessons/${lessonId}`, {
-        headers,
-        credentials: 'include'
-      });
+      const res = await apiFetch(`/training/lessons/${lessonId}`);
       if (res.ok) {
         const data = await res.json();
         setSelectedLesson(data);
@@ -164,7 +153,7 @@ export default function EmployeeLessons() {
                     <HelpCircle size={14} className="text-emerald-400" />
                     Quiz checks your understanding. Standard to pass: 70%+
                   </div>
-                  <Link to={`/employee/quiz/${selectedLesson.quiz.id}`}>
+                  <Link to={`/quiz/${selectedLesson.quiz.id}`}>
                     <Button className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2 flex items-center gap-2">
                       Take Quiz Check
                       <ArrowRight size={16} />

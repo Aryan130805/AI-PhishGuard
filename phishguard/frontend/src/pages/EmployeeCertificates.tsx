@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Award, Download, FileText, CheckCircle, Calendar } from 'lucide-react';
 import { useToast } from '../components/ui/Toast';
+import { apiFetch } from '../lib/api';
 
 interface Certificate {
   id: number;
@@ -22,13 +23,7 @@ export default function EmployeeCertificates() {
   const fetchCertificates = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('employee_token');
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch('http://localhost:8000/certificates', {
-        headers,
-        credentials: 'include'
-      });
+      const res = await apiFetch('/certificates');
       if (res.ok) {
         setCerts(await res.json());
       } else {
@@ -44,13 +39,7 @@ export default function EmployeeCertificates() {
   const handleDownload = async (cert: Certificate) => {
     setDownloading(cert.id);
     try {
-      const token = localStorage.getItem('employee_token');
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch(`http://localhost:8000/certificates/${cert.id}/download`, {
-        headers,
-        credentials: 'include'
-      });
+      const res = await apiFetch(`/certificates/${cert.id}/download`);
       if (res.ok) {
         const blob = await res.blob();
         const url = window.URL.createObjectURL(blob);

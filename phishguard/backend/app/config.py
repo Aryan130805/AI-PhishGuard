@@ -4,7 +4,14 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "PhishGuard API"
     ENVIRONMENT: str = "development"
     
-    # Database Configuration
+    # Supabase & Database Configuration
+    SUPABASE_PROJECT_ID: str = "ezjmrpdqgiicfprkgadi"
+    SUPABASE_URL: str = "https://ezjmrpdqgiicfprkgadi.supabase.co"
+    SUPABASE_ANON_KEY: str = ""
+    SUPABASE_SERVICE_ROLE_KEY: str = ""
+    SUPABASE_DB_PASSWORD: str = ""
+    SUPABASE_DB_URL: str | None = None
+    
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "postgres"
     POSTGRES_HOST: str = "db"
@@ -14,12 +21,16 @@ class Settings(BaseSettings):
     
     @property
     def DATABASE_URL(self) -> str:
+        import os
+        if self.SUPABASE_DB_URL:
+            return self.SUPABASE_DB_URL
         if self.DB_URL:
             return self.DB_URL
-        import os
         env_url = os.environ.get("DATABASE_URL")
         if env_url:
             return env_url
+        if self.SUPABASE_DB_PASSWORD:
+            return f"postgresql://postgres:{self.SUPABASE_DB_PASSWORD}@db.ezjmrpdqgiicfprkgadi.supabase.co:5432/postgres"
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     # Redis / Celery Configuration

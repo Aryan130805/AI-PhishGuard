@@ -1,0 +1,18 @@
+# Environment files with credentials
+*.env
+!.env.example
+
+# Python & Databases
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+*.db
+.coverage
+.pytest_cache/
+
+# Node & Build artifacts
+node_modules/
+dist/
+.DS_Store

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Mail, Building, Shield, Edit2, Save, X, Key, TrendingDown, TrendingUp, Activity } from 'lucide-react';
 import { useToast } from '../components/ui/Toast';
+import { apiFetch } from '../lib/api';
 
 interface UserProfile {
   id: number;
@@ -33,13 +34,7 @@ export default function EmployeeProfile() {
   }, []);
 
   const fetchProfile = async () => {
-    const token = localStorage.getItem('employee_token');
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    const res = await fetch('http://localhost:8000/users/me', {
-      headers,
-      credentials: 'include'
-    });
+    const res = await apiFetch('/users/me');
     if (res.ok) {
       const data = await res.json();
       setProfile(data);
@@ -48,32 +43,20 @@ export default function EmployeeProfile() {
   };
 
   const fetchAnalytics = async () => {
-    const token = localStorage.getItem('employee_token');
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    const res = await fetch('http://localhost:8000/analytics/user/me', {
-      headers,
-      credentials: 'include'
-    });
+    const res = await apiFetch('/analytics/user/me');
     if (res.ok) setAnalytics(await res.json());
   };
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const token = localStorage.getItem('employee_token');
       const body: Record<string, string> = {};
       if (formEmail && formEmail !== profile?.email) body.email = formEmail;
       if (formPassword) body.password = formPassword;
 
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch('http://localhost:8000/users/me', {
+      const res = await apiFetch('/users/me', {
         method: 'PUT',
-        headers,
         body: JSON.stringify(body),
-        credentials: 'include'
       });
 
       if (res.ok) {
@@ -99,7 +82,12 @@ export default function EmployeeProfile() {
     : riskScore >= 70 ? 'bg-emerald-500/10 border-emerald-500/20' : riskScore >= 40 ? 'bg-amber-500/10 border-amber-500/20' : 'bg-red-500/10 border-red-500/20';
 
   const initials = profile?.email.substring(0, 2).toUpperCase() || '??';
-  const displayName = profile ? profile.email.split('@')[0].replace(/^\w/, c => c.toUpperCase()) : 'Employee';
+  const getEmployeeName = () => {
+    if (!profile?.email) return 'Employee';
+    const namePart = profile.email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    return namePart === 'Admin' ? 'Employee' : namePart;
+  };
+  const displayName = getEmployeeName();
 
   return (
     <div className="space-y-8 max-w-3xl animate-in fade-in duration-300">

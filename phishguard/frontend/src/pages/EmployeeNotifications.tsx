@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Bell, CheckCheck, BookOpen, Award, ShieldAlert, Circle, CheckCircle, Mail } from 'lucide-react';
 import { useToast } from '../components/ui/Toast';
+import { apiFetch } from '../lib/api';
 
 interface NotificationItem {
   id: number;
@@ -43,13 +44,7 @@ export default function EmployeeNotifications() {
   const fetchNotifications = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('employee_token');
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch('http://localhost:8000/notifications', {
-        headers,
-        credentials: 'include'
-      });
+      const res = await apiFetch('/notifications');
       if (res.ok) {
         setNotifications(await res.json());
       }
@@ -61,28 +56,14 @@ export default function EmployeeNotifications() {
   };
 
   const markRead = async (id: number) => {
-    const token = localStorage.getItem('employee_token');
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    await fetch(`http://localhost:8000/notifications/${id}/read`, {
-      method: 'POST',
-      headers,
-      credentials: 'include'
-    });
+    await apiFetch(`/notifications/${id}/read`, { method: 'POST' });
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
   };
 
   const markAllRead = async () => {
     setMarkingAll(true);
     try {
-      const token = localStorage.getItem('employee_token');
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      await fetch('http://localhost:8000/notifications/read-all', {
-        method: 'POST',
-        headers,
-        credentials: 'include'
-      });
+      await apiFetch('/notifications/read-all', { method: 'POST' });
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
       addToast({ title: 'Done', description: 'All notifications marked as read.', type: 'success' });
     } finally {

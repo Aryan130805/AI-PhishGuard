@@ -164,8 +164,6 @@ Here are essential recommendations:
           ) : (
             <div className="relative flex items-center justify-center">
               <Sparkles size={26} className="fill-blue-200/20 stroke-white group-hover:rotate-12 transition-transform duration-200" />
-              <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-slate-950 animate-ping"></span>
-              <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-slate-950"></span>
             </div>
           )}
         </button>
@@ -180,7 +178,6 @@ Here are essential recommendations:
             <div className="flex items-center gap-3">
               <div className="relative p-2 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-xl text-white shadow-md shadow-blue-500/20">
                 <Sparkles size={18} className="fill-blue-200/20" />
-                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-slate-950"></span>
               </div>
               <div>
                 <h3 className="text-sm font-bold text-white flex items-center gap-1.5 leading-tight">

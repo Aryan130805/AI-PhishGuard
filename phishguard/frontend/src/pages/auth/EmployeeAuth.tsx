@@ -2,11 +2,12 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Users, Mail, Key, User, ArrowLeft, Check, CheckCircle2, 
-  Search, Building2, AlertCircle, Shield, ChevronDown, Loader2
+  Search, Building2, AlertCircle, Shield, ChevronDown, Loader2, Layers
 } from 'lucide-react';
 import { useToast } from '../../components/ui/Toast';
 import { useAuth } from '../../AuthContext';
 import { supabase } from '../../lib/supabase';
+import { apiFetch } from '../../lib/api';
 
 interface PublicOrganization {
   id: number;
@@ -14,6 +15,12 @@ interface PublicOrganization {
   logo_url?: string | null;
   industry?: string | null;
   is_verified: boolean;
+}
+
+interface PublicDepartment {
+  id: number;
+  name: string;
+  organization_id: number;
 }
 
 export default function EmployeeAuth() {
@@ -36,6 +43,11 @@ export default function EmployeeAuth() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [selectedOrg, setSelectedOrg] = useState<PublicOrganization | null>(null);
 
+  // Department State
+  const [departments, setDepartments] = useState<PublicDepartment[]>([]);
+  const [selectedDeptName, setSelectedDeptName] = useState<string>('Engineering');
+  const [isDeptLoading, setIsDeptLoading] = useState(false);
+
   // Organization Search Dropdown State
   const [orgSearchQuery, setOrgSearchQuery] = useState('');
   const [organizations, setOrganizations] = useState<PublicOrganization[]>([]);
@@ -53,10 +65,20 @@ export default function EmployeeAuth() {
   const hasSpecial = /[^A-Za-z0-9]/.test(password);
   const isPasswordStrong = hasMinLength && hasUppercase && hasNumber && hasSpecial;
 
-  // ── Fetch verified organizations from Supabase (debounced) ───────────────────
+  // ── Fetch verified organizations from API / Supabase (debounced) ──────────
   const fetchOrganizations = useCallback(async (query: string) => {
     setIsOrgLoading(true);
     try {
+      const apiRes = await apiFetch(`/organizations/search?q=${encodeURIComponent(query.trim())}`).catch(() => null);
+      if (apiRes && apiRes.ok) {
+        const data = await apiRes.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setOrganizations(data as PublicOrganization[]);
+          setIsOrgLoading(false);
+          return;
+        }
+      }
+
       let q = supabase
         .from('organizations')
         .select('id, name, logo_url, industry, is_verified')
@@ -78,6 +100,40 @@ export default function EmployeeAuth() {
       setOrganizations([]);
     } finally {
       setIsOrgLoading(false);
+    }
+  }, []);
+
+  // ── Fetch Departments for Selected Organization ─────────────────────────
+  const fetchDepartments = useCallback(async (orgId: number) => {
+    setIsDeptLoading(true);
+    try {
+      const apiRes = await apiFetch(`/organizations/${orgId}/departments`).catch(() => null);
+      if (apiRes && apiRes.ok) {
+        const data = await apiRes.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setDepartments(data);
+          setSelectedDeptName(data[0].name);
+          setIsDeptLoading(false);
+          return;
+        }
+      }
+      
+      const defaults: PublicDepartment[] = [
+        { id: 1, name: 'Engineering', organization_id: orgId },
+        { id: 2, name: 'Sales', organization_id: orgId },
+        { id: 3, name: 'Marketing', organization_id: orgId },
+        { id: 4, name: 'HR', organization_id: orgId },
+        { id: 5, name: 'Finance', organization_id: orgId },
+        { id: 6, name: 'Security', organization_id: orgId },
+        { id: 7, name: 'Operations', organization_id: orgId },
+        { id: 8, name: 'Legal', organization_id: orgId },
+      ];
+      setDepartments(defaults);
+      setSelectedDeptName('Engineering');
+    } catch {
+      setDepartments([]);
+    } finally {
+      setIsDeptLoading(false);
     }
   }, []);
 
@@ -130,6 +186,7 @@ export default function EmployeeAuth() {
     setSelectedOrg(org);
     setOrgSearchQuery(org.name);
     setIsOrgDropdownOpen(false);
+    fetchDepartments(org.id);
   };
 
   // Handle Login submit
@@ -180,77 +237,74 @@ export default function EmployeeAuth() {
 
     setIsLoading(true);
     try {
-      // 1. Create Supabase Auth user
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          data: {
-            first_name: firstName.trim(),
-            last_name: lastName.trim(),
-            role: 'employee',
-          },
-        },
-      });
+      // 1. Submit employee registration & pending join request to FastAPI backend
+      const apiRes = await apiFetch('/auth/register-employee', {
+        method: 'POST',
+        body: JSON.stringify({
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          email: email.trim(),
+          password,
+          organization_id: selectedOrg.id,
+          department_name: selectedDeptName || 'Engineering',
+        })
+      }).catch(() => null);
 
-      if (signUpError || !signUpData.user) {
+      if (apiRes && !apiRes.ok) {
+        const errorData = await apiRes.json().catch(() => null);
         setIsLoading(false);
         addToast({
           title: 'Registration Failed',
-          description: signUpError?.message ?? 'Could not create account. This email may already be registered.',
+          description: errorData?.detail || 'Could not register employee account.',
           type: 'error',
         });
         return;
       }
 
-      const supabaseUid = signUpData.user.id;
-
-      // 2. Get employee role id
-      let roleId: number | null = null;
-      const { data: roleRow } = await supabase
-        .from('roles')
-        .select('id')
-        .eq('name', 'employee')
-        .single();
-      if (roleRow) roleId = (roleRow as { id: number }).id;
-
-      // 3. Create user profile row with pending status (is_active: false) for Admin Approval
-      await supabase.from('users').insert({
-        supabase_uid: supabaseUid,
-        email: email.trim(),
-        first_name: firstName.trim(),
-        last_name: lastName.trim(),
-        organization_id: selectedOrg.id,
-        is_admin: false,
-        is_active: false,
-        role_id: roleId,
-      });
-
-      // 4. Send joining request notification to organization admin
-      await supabase.from('notifications').insert({
-        user_id: selectedOrg.id,
-        type: 'join_request',
-        payload: {
-          title: 'New Joining Request',
-          message: `${firstName.trim()} ${lastName.trim()} (${email.trim()}) requested to join ${selectedOrg.name}.`,
+      // 2. Secondary Supabase sync (optional fallback)
+      try {
+        const { data: signUpData } = await supabase.auth.signUp({
           email: email.trim(),
-          name: `${firstName.trim()} ${lastName.trim()}`,
-          org_id: selectedOrg.id,
-        },
-        read: false,
-      }).catch(() => null);
+          password,
+          options: {
+            data: {
+              first_name: firstName.trim(),
+              last_name: lastName.trim(),
+              role: 'employee',
+            },
+          },
+        }).catch(() => ({ data: null }));
+
+        if (signUpData?.user) {
+          await supabase.from('users').insert({
+            supabase_uid: signUpData.user.id,
+            email: email.trim(),
+            first_name: firstName.trim(),
+            last_name: lastName.trim(),
+            organization_id: selectedOrg.id,
+            is_admin: false,
+            is_active: false,
+          }).catch(() => null);
+        }
+      } catch {
+        // ignore Supabase sync error if backend succeeds
+      }
 
       addToast({
         title: 'Joining Request Submitted! ⏳',
-        description: `Your request to join ${selectedOrg.name} has been sent to the organization admin for approval.`,
+        description: `Your request to join ${selectedOrg.name} (${selectedDeptName || 'Engineering'}) has been sent to the organization admin for approval.`,
         type: 'info',
       });
 
       setIsLoading(false);
       setMode('signin');
-    } catch {
+    } catch (err: any) {
       setIsLoading(false);
-      addToast({ title: 'Connection Error', description: 'Could not connect to authentication server.', type: 'error' });
+      addToast({
+        title: 'Connection Error',
+        description: err?.message || 'Could not connect to authentication server.',
+        type: 'error',
+      });
     }
   };
 
@@ -554,6 +608,49 @@ export default function EmployeeAuth() {
                   </div>
                 )}
               </div>
+
+              {/* Select Department Dropdown */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Layers size={13} className="text-emerald-400" /> Select Department <span className="text-emerald-400">*</span>
+                  </span>
+                  {selectedOrg && (
+                    <span className="text-[10px] text-slate-400 font-normal">
+                      {departments.length} available
+                    </span>
+                  )}
+                </label>
+                <div className="relative">
+                  <select
+                    value={selectedDeptName}
+                    onChange={(e) => setSelectedDeptName(e.target.value)}
+                    disabled={!selectedOrg || isDeptLoading}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all appearance-none cursor-pointer disabled:opacity-50"
+                  >
+                    {departments.length > 0 ? (
+                      departments.map((dept) => (
+                        <option key={dept.id || dept.name} value={dept.name} className="bg-slate-900 text-white">
+                          {dept.name}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="Engineering" className="bg-slate-900 text-white">Engineering</option>
+                        <option value="Sales" className="bg-slate-900 text-white">Sales</option>
+                        <option value="Marketing" className="bg-slate-900 text-white">Marketing</option>
+                        <option value="HR" className="bg-slate-900 text-white">HR</option>
+                        <option value="Finance" className="bg-slate-900 text-white">Finance</option>
+                        <option value="Security" className="bg-slate-900 text-white">Security</option>
+                        <option value="Operations" className="bg-slate-900 text-white">Operations</option>
+                        <option value="Legal" className="bg-slate-900 text-white">Legal</option>
+                      </>
+                    )}
+                  </select>
+                  <ChevronDown size={15} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                </div>
+              </div>
+
 
               {/* Password */}
               <div className="space-y-1.5">

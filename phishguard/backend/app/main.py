@@ -1,4 +1,7 @@
-from fastapi import FastAPI, Depends
+import os
+from fastapi import FastAPI, Depends, Request, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
 from app.database import get_db
@@ -16,6 +19,15 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title=settings.PROJECT_NAME)
 
+    # Middleware to strip optional /api prefix for unified backend routes
+    @app.middleware("http")
+    async def strip_api_prefix(request: Request, call_next):
+        if request.url.path.startswith("/api/"):
+            request.scope["path"] = request.url.path[4:]
+        elif request.url.path == "/api":
+            request.scope["path"] = "/"
+        return await call_next(request)
+
     # Setup CORS middleware to allow cross-origin credentials (cookies)
     from fastapi.middleware.cors import CORSMiddleware
     app.add_middleware(
@@ -26,6 +38,8 @@ def create_app() -> FastAPI:
             "http://127.0.0.1:3000",
             "http://localhost:5173",
             "http://localhost:80",
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
             "https://phisguard-ochre.vercel.app",
         ],
         allow_origin_regex=r"https://.*\.vercel\.app",
@@ -83,6 +97,19 @@ def create_app() -> FastAPI:
                         conn.execute(text("ALTER TABLE users ADD COLUMN first_name VARCHAR"))
                     if "last_name" not in cols:
                         conn.execute(text("ALTER TABLE users ADD COLUMN last_name VARCHAR"))
+                if "lessons" in inspector.get_table_names():
+                    cols = [c["name"] for c in inspector.get_columns("lessons")]
+                    lesson_cols = [
+                        ("category", "VARCHAR DEFAULT 'Phishing Attacks'"),
+                        ("difficulty", "VARCHAR DEFAULT 'Beginner'"),
+                        ("summary", "VARCHAR"),
+                        ("is_emerging_threat", "BOOLEAN DEFAULT 0"),
+                        ("cve_id", "VARCHAR"),
+                        ("published_date", "VARCHAR"),
+                    ]
+                    for col_name, col_type in lesson_cols:
+                        if col_name not in cols:
+                            conn.execute(text(f"ALTER TABLE lessons ADD COLUMN {col_name} {col_type}"))
                 conn.commit()
         except Exception as e:
             print(f"Table sync warning: {e}")
@@ -123,6 +150,32 @@ def create_app() -> FastAPI:
             
         return health_status
 
+    # Mount static files and SPA route if compiled frontend dist exists
+    static_dir = os.environ.get(
+        "STATIC_DIR",
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist"))
+    )
+    assets_dir = os.path.join(static_dir, "assets")
+
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        if full_path.startswith("api/") or full_path in ["health", "docs", "openapi.json", "redoc"]:
+            raise HTTPException(status_code=404, detail="Not Found")
+
+        file_path = os.path.join(static_dir, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+
+        index_file = os.path.join(static_dir, "index.html")
+        if os.path.exists(index_file):
+            return FileResponse(index_file)
+
+        raise HTTPException(status_code=404, detail="Frontend static build not found. Please build frontend first.")
+
     return app
 
 app = create_app()
+

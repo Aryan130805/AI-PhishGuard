@@ -1,8 +1,117 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Shield, ArrowRight, CheckCircle2, Lock, Sparkles, Zap, 
   BarChart3, Brain, Award, Users, ChevronRight
 } from 'lucide-react';
+
+// Hero Heading Intro & Continuous Animation Component
+function HeroHeadingAnimation() {
+  const [activeIndex, setActiveIndex] = useState<0 | 1>(0);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+
+  useEffect(() => {
+    // Respect prefers-reduced-motion setting
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    if (mediaQuery.matches) {
+      setReducedMotion(true);
+      return;
+    }
+
+    const DISPLAY_DURATION = 3000; // 3.0s pause for each headline
+    const TRANSITION_DURATION = 2200; // 2.2s smooth ease-out transition
+
+    const interval = setInterval(() => {
+      setIsTransitioning(true);
+      setActiveIndex((prev) => (prev === 0 ? 1 : 0));
+
+      const timer = setTimeout(() => {
+        setIsTransitioning(false);
+      }, TRANSITION_DURATION);
+
+      return () => clearTimeout(timer);
+    }, DISPLAY_DURATION + TRANSITION_DURATION);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  if (reducedMotion) {
+    return (
+      <h1 className="text-4xl sm:text-6xl md:text-7xl font-black tracking-tight leading-[1.1] text-white mb-6 max-w-4xl mx-auto text-center">
+        Protect Your Workforce From{' '}
+        <span className="bg-gradient-to-r from-blue-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent">
+          Phishing Attacks
+        </span>
+      </h1>
+    );
+  }
+
+  // Calculate high-end Apple/Vercel-style transition parameters
+  const getHeadingStyle = (index: 0 | 1): React.CSSProperties => {
+    const isActive = activeIndex === index;
+
+    if (isActive) {
+      return {
+        opacity: 1,
+        transform: 'translateY(0px) scale(1)',
+        filter: 'blur(0px)',
+        transition: 'opacity 2200ms cubic-bezier(0.16, 1, 0.3, 1), transform 2200ms cubic-bezier(0.16, 1, 0.3, 1), filter 2200ms cubic-bezier(0.16, 1, 0.3, 1)',
+        willChange: 'opacity, transform, filter',
+      };
+    }
+
+    // Inactive heading
+    if (isTransitioning) {
+      // Exiting headline gliding upward with subtle blur
+      return {
+        opacity: 0,
+        transform: 'translateY(-35px) scale(0.95)',
+        filter: 'blur(12px)',
+        transition: 'opacity 2200ms cubic-bezier(0.16, 1, 0.3, 1), transform 2200ms cubic-bezier(0.16, 1, 0.3, 1), filter 2200ms cubic-bezier(0.16, 1, 0.3, 1)',
+        pointerEvents: 'none',
+        willChange: 'opacity, transform, filter',
+      };
+    }
+
+    // Idle inactive headline resting below, ready for next turn
+    return {
+      opacity: 0,
+      transform: 'translateY(35px) scale(0.95)',
+      filter: 'blur(12px)',
+      transition: 'none',
+      pointerEvents: 'none',
+    };
+  };
+
+  return (
+    <div className="grid place-items-center mb-6 max-w-4xl mx-auto w-full">
+      {/* Heading 0: Welcome to PhishGuard */}
+      <h1
+        style={getHeadingStyle(0)}
+        className="col-start-1 row-start-1 text-4xl sm:text-6xl md:text-7xl font-black tracking-tight leading-[1.1] text-white text-center select-none"
+        aria-hidden={activeIndex !== 0}
+      >
+        Welcome to{' '}
+        <span className="bg-gradient-to-r from-blue-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent">
+          PhishGuard
+        </span>
+      </h1>
+
+      {/* Heading 1: Protect Your Workforce From Phishing Attacks */}
+      <h1
+        style={getHeadingStyle(1)}
+        className="col-start-1 row-start-1 text-4xl sm:text-6xl md:text-7xl font-black tracking-tight leading-[1.1] text-white text-center select-none"
+        aria-hidden={activeIndex !== 1}
+      >
+        Protect Your Workforce From{' '}
+        <span className="bg-gradient-to-r from-blue-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent">
+          Phishing Attacks
+        </span>
+      </h1>
+    </div>
+  );
+}
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -60,13 +169,8 @@ export default function LandingPage() {
           <span>Welcome to PhishGuard · Next-Gen Cyber Awareness Platform</span>
         </div>
 
-        {/* Main Headline */}
-        <h1 className="text-4xl sm:text-6xl md:text-7xl font-black tracking-tight leading-[1.1] text-white mb-6 max-w-4xl mx-auto">
-          Protect Your Workforce From{' '}
-          <span className="bg-gradient-to-r from-blue-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent">
-            Phishing Attacks
-          </span>
-        </h1>
+        {/* Animated Main Headline */}
+        <HeroHeadingAnimation />
 
         {/* Subheading */}
         <p className="text-slate-400 text-base sm:text-xl max-w-2xl mx-auto leading-relaxed mb-10">

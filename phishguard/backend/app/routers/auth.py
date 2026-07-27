@@ -81,6 +81,8 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
 
 @router.post("/register-employee", status_code=status.HTTP_201_CREATED)
 def register_employee(payload: EmployeeRegister, db: Session = Depends(get_db)):
+    from app.models.department import Department
+
     # Check if user already exists
     existing_user = db.query(User).filter(User.email == payload.email).first()
     if existing_user:
@@ -89,36 +91,52 @@ def register_employee(payload: EmployeeRegister, db: Session = Depends(get_db)):
             detail="Email already registered"
         )
         
-    # Check if specified organization exists and is verified
+    # Check if specified organization exists
     org = db.query(Organization).filter(Organization.id == payload.organization_id).first()
     if not org:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Selected organization does not exist. Please contact your administrator."
         )
-    if hasattr(org, 'is_verified') and not org.is_verified:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Selected organization is inactive or pending verification."
-        )
         
     employee_role = get_or_create_role(db, "employee")
     hashed_pwd = get_password_hash(payload.password)
     
+    # Resolve Department
+    dept_id = payload.department_id
+    if not dept_id and payload.department_name:
+        dept = db.query(Department).filter(
+            Department.organization_id == org.id,
+            Department.name == payload.department_name.strip()
+        ).first()
+        if not dept:
+            dept = Department(name=payload.department_name.strip(), organization_id=org.id)
+            db.add(dept)
+            db.commit()
+            db.refresh(dept)
+        dept_id = dept.id
+    
+    # Create user with is_active = False (Pending join approval)
     user = User(
         email=payload.email,
         hashed_password=hashed_pwd,
         first_name=payload.first_name,
         last_name=payload.last_name,
         organization_id=org.id,
+        department_id=dept_id,
         role_id=employee_role.id,
-        is_admin=False
+        is_admin=False,
+        is_active=False
     )
     db.add(user)
     db.commit()
     db.refresh(user)
     
-    return {"message": "Employee registration successful", "user_id": user.id}
+    return {
+        "message": "Joining request submitted successfully. Pending organization admin approval.",
+        "user_id": user.id
+    }
+
 
 
 @router.post("/register-organization", status_code=status.HTTP_201_CREATED)

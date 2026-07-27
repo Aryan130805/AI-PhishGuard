@@ -15,6 +15,12 @@ class Lesson(Base):
     title = Column(String, nullable=False)
     content = Column(String, nullable=False)
     ai_generated = Column(Boolean, default=False)
+    category = Column(String, default="Phishing Attacks")
+    difficulty = Column(String, default="Beginner")
+    summary = Column(String, nullable=True)
+    is_emerging_threat = Column(Boolean, default=False)
+    cve_id = Column(String, nullable=True)
+    published_date = Column(String, nullable=True)
 
     quizzes = relationship("Quiz", back_populates="lesson", cascade="all, delete-orphan")
 

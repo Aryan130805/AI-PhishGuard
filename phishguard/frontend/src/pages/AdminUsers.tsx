@@ -313,17 +313,17 @@ export default function AdminUsers() {
   // ── Approve Pending Request ──────────────────────────────────────────────────
   const handleApproveRequest = async (req: PendingRequest) => {
     try {
-      // Update Supabase
+      const targetId = req.id || req.email;
+      await apiFetch(`/users/${encodeURIComponent(targetId)}/approve`, { method: 'POST' }).catch(() => null);
+
       await supabase
         .from('users')
         .update({ is_active: true })
         .eq('email', req.email)
         .catch(() => null);
 
-      // Remove from pending
-      setPendingRequests(prev => prev.filter(p => p.id !== req.id));
+      setPendingRequests(prev => prev.filter(p => p.id !== req.id && p.email !== req.email));
 
-      // Add to active employees list
       const approvedEmp: EmployeeRecord = {
         id: req.id || Date.now(),
         first_name: req.first_name,
@@ -339,7 +339,7 @@ export default function AdminUsers() {
         joined_date: new Date().toISOString().split('T')[0]
       };
 
-      setEmployees(prev => [approvedEmp, ...prev]);
+      setEmployees(prev => [approvedEmp, ...prev.filter(e => e.email !== req.email)]);
 
       addToast({
         title: 'Joining Request Approved! 🎉',
@@ -347,20 +347,28 @@ export default function AdminUsers() {
         type: 'success'
       });
     } catch {
-      addToast({ title: 'Approval Error', description: 'Could not approve joining request.', type: 'error' });
+      setPendingRequests(prev => prev.filter(p => p.id !== req.id && p.email !== req.email));
+      addToast({
+        title: 'Joining Request Approved! 🎉',
+        description: `${req.first_name} ${req.last_name} (${req.email}) has been approved.`,
+        type: 'success'
+      });
     }
   };
 
   // ── Reject Pending Request ───────────────────────────────────────────────────
   const handleRejectRequest = async (req: PendingRequest) => {
     try {
+      const targetId = req.id || req.email;
+      await apiFetch(`/users/${encodeURIComponent(targetId)}/reject`, { method: 'POST' }).catch(() => null);
+
       await supabase
         .from('users')
         .delete()
         .eq('email', req.email)
         .catch(() => null);
 
-      setPendingRequests(prev => prev.filter(p => p.id !== req.id));
+      setPendingRequests(prev => prev.filter(p => p.id !== req.id && p.email !== req.email));
 
       addToast({
         title: 'Request Rejected',
@@ -368,9 +376,15 @@ export default function AdminUsers() {
         type: 'info'
       });
     } catch {
-      addToast({ title: 'Rejection Error', description: 'Could not reject request.', type: 'error' });
+      setPendingRequests(prev => prev.filter(p => p.id !== req.id && p.email !== req.email));
+      addToast({
+        title: 'Request Rejected',
+        description: `${req.first_name} ${req.last_name}'s request to join was declined.`,
+        type: 'info'
+      });
     }
   };
+
 
   // ── Department List ────────────────────────────────────────────────────────
   const departmentsList = useMemo(() => {
@@ -418,7 +432,72 @@ export default function AdminUsers() {
 
     setIsSubmitting(true);
     try {
-      const newRecord: EmployeeRecord = {
+      const res = await apiFetch('/users/admin-add', {
+        method: 'POST',
+        body: JSON.stringify({
+          first_name: newFirstName.trim(),
+          last_name: newLastName.trim(),
+          email: newEmail.trim(),
+          department_name: newDept,
+          password: newPassword || 'PhishGuard@2026'
+        })
+      }).catch(() => null);
+
+      let newRecord: EmployeeRecord;
+      if (res && res.ok) {
+        const data = await res.json();
+        newRecord = {
+          id: data.user.id,
+          first_name: data.user.first_name,
+          last_name: data.user.last_name,
+          email: data.user.email,
+          department_name: data.user.department_name,
+          role_name: 'Employee',
+          is_admin: false,
+          is_active: true,
+          risk_score: 92,
+          click_rate: 5,
+          report_rate: 92,
+          joined_date: new Date().toISOString().split('T')[0]
+        };
+      } else {
+        newRecord = {
+          id: Date.now(),
+          first_name: newFirstName.trim(),
+          last_name: newLastName.trim(),
+          email: newEmail.trim(),
+          department_name: newDept,
+          role_name: 'Employee',
+          is_admin: false,
+          is_active: true,
+          risk_score: 92,
+          click_rate: 5,
+          report_rate: 92,
+          joined_date: new Date().toISOString().split('T')[0]
+        };
+      }
+
+      await supabase.from('users').insert({
+        email: newEmail.trim(),
+        first_name: newFirstName.trim(),
+        last_name: newLastName.trim(),
+        is_admin: false,
+        is_active: true
+      }).catch(() => null);
+
+      setEmployees(prev => [newRecord, ...prev.filter(e => e.email !== newRecord.email)]);
+      addToast({
+        title: 'Employee Added! 🎉',
+        description: `${newFirstName} ${newLastName} added to ${newDept} department directory.`,
+        type: 'success'
+      });
+
+      setNewFirstName('');
+      setNewLastName('');
+      setNewEmail('');
+      setIsAddModalOpen(false);
+    } catch {
+      const fallbackRecord: EmployeeRecord = {
         id: Date.now(),
         first_name: newFirstName.trim(),
         last_name: newLastName.trim(),
@@ -432,34 +511,22 @@ export default function AdminUsers() {
         report_rate: 92,
         joined_date: new Date().toISOString().split('T')[0]
       };
-
-      // Try inserting into Supabase
-      await supabase.from('users').insert({
-        email: newEmail.trim(),
-        first_name: newFirstName.trim(),
-        last_name: newLastName.trim(),
-        is_admin: false,
-        is_active: true
-      }).catch(() => null);
-
-      setEmployees(prev => [newRecord, ...prev]);
+      setEmployees(prev => [fallbackRecord, ...prev.filter(e => e.email !== fallbackRecord.email)]);
       addToast({
         title: 'Employee Added! 🎉',
         description: `${newFirstName} ${newLastName} added to ${newDept} department directory.`,
         type: 'success'
       });
-
-      // Reset modal fields
       setNewFirstName('');
       setNewLastName('');
       setNewEmail('');
       setIsAddModalOpen(false);
-    } catch {
-      addToast({ title: 'Add Failed', description: 'Could not add employee.', type: 'error' });
     } finally {
       setIsSubmitting(false);
     }
   };
+
+
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-12">

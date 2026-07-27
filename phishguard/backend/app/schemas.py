@@ -86,12 +86,30 @@ class OrganizationPublic(BaseModel):
     class Config:
         from_attributes = True
 
+class DepartmentPublic(BaseModel):
+    id: int
+    name: str
+    organization_id: int
+
+    class Config:
+        from_attributes = True
+
 class EmployeeRegister(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     email: EmailStr
     password: str
     organization_id: int
+    department_id: Optional[int] = None
+    department_name: Optional[str] = None
+
+class AdminAddUser(BaseModel):
+    first_name: str
+    last_name: str
+    email: EmailStr
+    password: Optional[str] = "PhishGuard@2026"
+    department_name: Optional[str] = "Engineering"
+    is_admin: Optional[bool] = False
 
 class OrganizationRegister(BaseModel):
     name: str
@@ -104,4 +122,5 @@ class OrganizationRegister(BaseModel):
     state: Optional[str] = None
     city: Optional[str] = None
     logo_url: Optional[str] = None
+
 

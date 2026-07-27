@@ -51,6 +51,61 @@ export default function PhishGuardAIChat() {
   const generateGeminiResponse = (query: string): string => {
     const q = query.toLowerCase();
 
+    if (q.includes('ransomware')) {
+      return `### ☣️ What is Ransomware?
+Ransomware is malicious software that encrypts an organization's files or locks systems until a ransom is paid.
+
+**Key Facts & Prevention:**
+- **Infection Vectors:** Phishing attachments (.iso, .zip), unpatched remote desktop/VPN services, and malicious links.
+- **Double Extortion:** Attackers steal sensitive data before encrypting it, threatening to leak it publicly.
+- **Action Plan:** Never pay ransoms. Disconnect affected machines from Wi-Fi/LAN immediately and notify the IT Security team.
+
+💡 *Recommended Module:* Check out **Ransomware Prevention & Incident Response** in the Learning Center!`;
+    }
+
+    if (q.includes('zero-day') || q.includes('zero day') || q.includes('cve')) {
+      return `### 🚨 What is a Zero-Day Vulnerability?
+A **Zero-Day** is a software flaw unknown to the vendor, leaving 0 days for a patch before threat actors begin exploiting it.
+
+**How to Stay Protected:**
+1. **Enable Automatic Updates:** Install vendor security patches immediately upon release.
+2. **Endpoint Protection (EDR):** Behavioral monitoring catches zero-day exploit activity before damage occurs.
+3. **Check Threat Intelligence:** Visit the **Latest Cyber Threats** tab in PhishGuard to monitor active CVE advisories.`;
+    }
+
+    if (q.includes('ai') || q.includes('deepfake') || q.includes('prompt injection')) {
+      return `### 🤖 AI Threats & Deepfake Voice/Video Scams:
+Generative AI allows cybercriminals to scale hyper-realistic attacks with zero spelling errors and cloned executive voices.
+
+**Key AI Threat Vectors:**
+- **Deepfake Audio:** Cloned 3-second voice samples used to authorize emergency wire transfers.
+- **Prompt Injection:** Hiding instructions inside web pages/documents to trick browser AI summarizer extensions.
+- **Synthetic Profiles:** Fake AI-generated avatars used for corporate social engineering.
+
+💡 *Recommended Module:* Check out **AI Phishing, Deepfakes & Prompt Injection** in the Learning Center!`;
+    }
+
+    if (q.includes('mfa') || q.includes('2fa') || q.includes('passkey') || q.includes('authenticator')) {
+      return `### 🔑 How MFA & Passkeys Protect Your Account:
+Multi-Factor Authentication adds an extra layer of defense beyond passwords. Even if an attacker steals your password, they cannot gain access without your secondary factor.
+
+**Best Authentication Ranking:**
+1. **Passkeys & FIDO2 YubiKeys (Best):** Cryptographically bound to domain origins — immune to phishing!
+2. **Authenticator Apps (TOTP):** Generates 6-digit codes locally on your device.
+3. **SMS OTP (Avoid if possible):** Vulnerable to SIM-swapping attacks.
+
+💡 *Recommended Module:* Check out **Passkeys, MFA & Credential Stuffing Defense**!`;
+    }
+
+    if (q.includes('latest') || q.includes('emerging') || q.includes('threats')) {
+      return `### 📢 Latest Cyber Threats (Live Intelligence):
+1. **CVE-2026-8910 (Critical):** Browser AI extension prompt injection vulnerability leaking session cookies.
+2. **Deepfake CFO Voice Scams (High):** AI voice cloning targeting corporate wire transfer approvals.
+3. **Quishing Wave (High):** Malicious QR codes embedded in fake PDF invoices.
+
+Navigate to **Latest Cyber Threats** in the Adaptive Learning Hub to view full advisories and mitigations!`;
+    }
+
     if (q.includes('spot') || q.includes('identify') || q.includes('detect') || q.includes('look like')) {
       return `### 🔍 How to Identify Phishing Emails:
 1. **Unusual Sender Address**: Check for subtle domain misspellings (e.g. \`supp0rt@paypa1.com\`).

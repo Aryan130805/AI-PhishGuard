@@ -177,6 +177,24 @@ export default function OrganizationAuth() {
         role_id: roleId,
       });
 
+      // 5. Backend sync call
+      await apiFetch('/auth/register-organization', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: orgName.trim(),
+          email: email.trim(),
+          password,
+          industry,
+          company_size: companySize,
+          website: website.trim() || null,
+          country: country.trim() || null,
+          state: state.trim() || null,
+          city: city.trim() || null,
+          logo_url: logoUrl.trim() || null,
+          supabase_uid: supabaseUid
+        }),
+      }).catch(() => null);
+
       addToast({
         title: 'Organization Registered! 🎉',
         description: 'Logging into your admin dashboard...',

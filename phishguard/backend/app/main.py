@@ -71,8 +71,16 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     def sync_db_columns():
+        # This patcher is only needed for SQLite (local dev without Supabase).
+        # When connected to PostgreSQL / Supabase the schema is already fully
+        # applied via supabase_migration.sql, so we skip it entirely to avoid
+        # "column already exists" errors on startup.
+        from app.database import engine
+        if not engine.url.drivername.startswith("sqlite"):
+            print("[startup] PostgreSQL/Supabase detected — skipping SQLite column patcher.")
+            return
+
         try:
-            from app.database import engine
             from sqlalchemy import inspect
             inspector = inspect(engine)
             with engine.connect() as conn:
@@ -112,7 +120,7 @@ def create_app() -> FastAPI:
                             conn.execute(text(f"ALTER TABLE lessons ADD COLUMN {col_name} {col_type}"))
                 conn.commit()
         except Exception as e:
-            print(f"Table sync warning: {e}")
+            print(f"[startup] SQLite column sync warning: {e}")
 
     @app.get("/health")
     def health_check(db: Session = Depends(get_db)):

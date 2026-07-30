@@ -237,7 +237,25 @@ export default function EmployeeAuth() {
 
     setIsLoading(true);
     try {
-      // 1. Submit employee registration & pending join request to FastAPI backend
+      // 1. Create user in Supabase Auth first
+      let supabaseUid: string | undefined = undefined;
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          data: {
+            first_name: firstName.trim(),
+            last_name: lastName.trim(),
+            role: 'employee',
+          },
+        },
+      }).catch(() => ({ data: null, error: null }));
+
+      if (signUpData?.user) {
+        supabaseUid = signUpData.user.id;
+      }
+
+      // 2. Submit employee registration & pending join request to FastAPI backend
       const apiRes = await apiFetch('/auth/register-employee', {
         method: 'POST',
         body: JSON.stringify({
@@ -247,6 +265,7 @@ export default function EmployeeAuth() {
           password,
           organization_id: selectedOrg.id,
           department_name: selectedDeptName || 'Engineering',
+          supabase_uid: supabaseUid
         })
       }).catch(() => null);
 
@@ -261,33 +280,17 @@ export default function EmployeeAuth() {
         return;
       }
 
-      // 2. Secondary Supabase sync (optional fallback)
-      try {
-        const { data: signUpData } = await supabase.auth.signUp({
+      // 3. Insert Supabase profile row if Supabase table is used directly
+      if (supabaseUid) {
+        await supabase.from('users').insert({
+          supabase_uid: supabaseUid,
           email: email.trim(),
-          password,
-          options: {
-            data: {
-              first_name: firstName.trim(),
-              last_name: lastName.trim(),
-              role: 'employee',
-            },
-          },
-        }).catch(() => ({ data: null }));
-
-        if (signUpData?.user) {
-          await supabase.from('users').insert({
-            supabase_uid: signUpData.user.id,
-            email: email.trim(),
-            first_name: firstName.trim(),
-            last_name: lastName.trim(),
-            organization_id: selectedOrg.id,
-            is_admin: false,
-            is_active: false,
-          }).catch(() => null);
-        }
-      } catch {
-        // ignore Supabase sync error if backend succeeds
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          organization_id: selectedOrg.id,
+          is_admin: false,
+          is_active: false,
+        }).catch(() => null);
       }
 
       addToast({

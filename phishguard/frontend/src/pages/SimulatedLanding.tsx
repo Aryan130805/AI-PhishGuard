@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { apiFetch } from '../lib/api';
 import { 
   ShieldAlert, Mail, CheckCircle, RefreshCw, KeyRound
 } from 'lucide-react';
@@ -31,8 +32,8 @@ export default function SimulatedLanding() {
   useEffect(() => {
     const fetchInfo = async () => {
       try {
-        const res = await fetch(`http://localhost:8000/track/landing-info/${token}`);
-        if (res.ok) {
+        const res = await apiFetch(`/track/landing-info/${token}`).catch(() => null);
+        if (res && res.ok) {
           const data = await res.json();
           setLandingInfo(data);
           setEmail('employee@company.com'); // Mock prefill
@@ -53,10 +54,9 @@ export default function SimulatedLanding() {
     setSubmitting(true);
     try {
       // Send credentials submitted event to backend, NEVER send the password
-      await fetch(`http://localhost:8000/track/credentials/${token}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
+      await apiFetch(`/track/credentials/${token}`, {
+        method: 'POST'
+      }).catch(() => null);
       setSubmitted(true);
     } catch (err) {
       console.error("Failed to log credentials submission", err);
@@ -69,12 +69,11 @@ export default function SimulatedLanding() {
   const handleReport = async () => {
     setReporting(true);
     try {
-      const res = await fetch('http://localhost:8000/report', {
+      const res = await apiFetch('/report', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token })
-      });
-      if (res.ok) {
+      }).catch(() => null);
+      if (res && res.ok) {
         setReported(true);
       }
     } catch (err) {

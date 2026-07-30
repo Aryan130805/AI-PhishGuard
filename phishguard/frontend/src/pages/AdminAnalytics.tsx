@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../co
 import { Button } from '../components/ui/Button';
 import { ChartWrapper, ChartTooltip } from '../components/ui/ChartWrapper';
 import { useToast } from '../components/ui/Toast';
+import { apiFetch } from '../lib/api';
 import { 
   RefreshCw, TrendingUp, Percent, Shield, Award
 } from 'lucide-react';
@@ -49,26 +50,19 @@ export default function AdminAnalytics() {
 
   // Authentication fetch wrapper
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
-    return fetch(url, {
-      ...options,
-      credentials: 'include',
-      headers: {
-        ...options.headers,
-        'Content-Type': 'application/json',
-      }
-    });
+    return apiFetch(url, options);
   };
 
   const loadData = async () => {
     setLoading(true);
     try {
       const [summaryRes, trendsRes, deptsRes] = await Promise.all([
-        fetchWithAuth('http://localhost:8000/analytics/summary'),
-        fetchWithAuth(`http://localhost:8000/analytics/trends?range=${range}`),
-        fetchWithAuth('http://localhost:8000/analytics/departments')
+        fetchWithAuth('/analytics/summary').catch(() => null),
+        fetchWithAuth(`/analytics/trends?range=${range}`).catch(() => null),
+        fetchWithAuth('/analytics/departments').catch(() => null)
       ]);
 
-      if (summaryRes.ok && trendsRes.ok && deptsRes.ok) {
+      if (summaryRes?.ok && trendsRes?.ok && deptsRes?.ok) {
         setSummary(await summaryRes.json());
         setTrends(await trendsRes.json());
         setDepartments(await deptsRes.json());
@@ -88,10 +82,10 @@ export default function AdminAnalytics() {
   const handleRecompute = async () => {
     setSyncing(true);
     try {
-      const res = await fetchWithAuth('http://localhost:8000/analytics/recompute', {
+      const res = await fetchWithAuth('/analytics/recompute', {
         method: 'POST'
       });
-      if (res.ok) {
+      if (res && res.ok) {
         const data = await res.json();
         success(`Successfully recomputed metrics for ${data.recomputed_users} employees.`);
         loadData(); // Refresh values

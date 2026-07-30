@@ -19,18 +19,31 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = "phishguard"
     DB_URL: str | None = None
     
+    # Explicit DATABASE_URL in .env — highest priority, used as-is
+    DATABASE_URL_OVERRIDE: str = ""
+
     @property
     def DATABASE_URL(self) -> str:
         import os
+        # 1. Explicit override from .env (DATABASE_URL_OVERRIDE or DATABASE_URL env var)
+        if self.DATABASE_URL_OVERRIDE:
+            return self.DATABASE_URL_OVERRIDE
+        env_url = os.environ.get("DATABASE_URL")
+        if env_url:
+            return env_url
+        # 2. Legacy named overrides
         if self.SUPABASE_DB_URL:
             return self.SUPABASE_DB_URL
         if self.DB_URL:
             return self.DB_URL
-        env_url = os.environ.get("DATABASE_URL")
-        if env_url:
-            return env_url
+        # 3. Build from password — session-mode pooler (port 5432) for SQLAlchemy
         if self.SUPABASE_DB_PASSWORD:
-            return f"postgresql://postgres:{self.SUPABASE_DB_PASSWORD}@db.ezjmrpdqgiicfprkgadi.supabase.co:5432/postgres"
+            project_ref = self.SUPABASE_PROJECT_ID
+            return (
+                f"postgresql://postgres.{project_ref}:{self.SUPABASE_DB_PASSWORD}"
+                f"@aws-1-ap-south-1.pooler.supabase.com:5432/postgres"
+            )
+        # 4. Fallback to local Docker Postgres
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     # Redis / Celery Configuration

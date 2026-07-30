@@ -6,6 +6,7 @@ class UserRegister(BaseModel):
     email: EmailStr
     password: str
     organization_name: str
+    supabase_uid: Optional[str] = None
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -31,6 +32,7 @@ class UserProfile(BaseModel):
     organization_name: Optional[str] = None
     department_name: Optional[str] = None
     role_name: Optional[str] = None
+    supabase_uid: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -102,6 +104,7 @@ class EmployeeRegister(BaseModel):
     organization_id: int
     department_id: Optional[int] = None
     department_name: Optional[str] = None
+    supabase_uid: Optional[str] = None
 
 class AdminAddUser(BaseModel):
     first_name: str
@@ -122,5 +125,6 @@ class OrganizationRegister(BaseModel):
     state: Optional[str] = None
     city: Optional[str] = None
     logo_url: Optional[str] = None
+    supabase_uid: Optional[str] = None
 
 

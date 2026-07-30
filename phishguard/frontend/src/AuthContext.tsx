@@ -136,7 +136,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       try {
-        // 1. Check local backend session if token exists
+        // 1. Check Supabase Auth session first
+        const { data } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
+        const s = data?.session ?? null;
+        if (cancelled) return;
+
+        setSession(s);
+        setSupabaseUser(s?.user ?? null);
+
+        if (s?.user) {
+          if (s.access_token) {
+            localStorage.setItem('employee_token', s.access_token);
+          }
+          const profile = await fetchSupabaseProfile(s.user.id, s.user.email);
+          if (!cancelled && profile) {
+            setUser(profile);
+            localStorage.setItem('pg_user', JSON.stringify(profile));
+            setIsLoading(false);
+            return;
+          }
+        }
+
+        // 2. Fallback check local backend session if token exists
         const token = localStorage.getItem('employee_token');
         if (token) {
           const res = await apiFetch('/users/me').catch(() => null);
@@ -150,22 +171,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           }
         }
-
-        // 2. Check Supabase session
-        const { data } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
-        const s = data?.session ?? null;
-        if (cancelled) return;
-
-        setSession(s);
-        setSupabaseUser(s?.user ?? null);
-
-        if (s?.user) {
-          const profile = await fetchSupabaseProfile(s.user.id, s.user.email);
-          if (!cancelled && profile) {
-            setUser(profile);
-            localStorage.setItem('pg_user', JSON.stringify(profile));
-          }
-        }
       } catch (err) {
         console.warn('[Auth] Session check error:', err);
       } finally {
@@ -173,7 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     })();
 
-    // Listen for auth state changes — ONLY react to explicit SIGNED_OUT or new SIGNED_IN
+    // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, s) => {
         if (cancelled) return;
@@ -188,9 +193,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        if (event === 'SIGNED_IN' && s?.user) {
+        if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && s?.user) {
           setSession(s);
           setSupabaseUser(s.user);
+          if (s.access_token) {
+            localStorage.setItem('employee_token', s.access_token);
+          }
           const profile = await fetchSupabaseProfile(s.user.id, s.user.email);
           if (!cancelled && profile) {
             setUser(profile);
@@ -207,14 +215,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // ── Hybrid Login (Local Backend First → Supabase Auth Second) ───────────────
+  // ── Supabase Auth Primary Login ─────────────────────────────────────────────
   const login = useCallback(async (
     email: string,
     password: string
   ): Promise<{ ok: boolean; role: UserRole; detail?: string }> => {
     const trimmedEmail = email.trim();
 
-    // 1. Try Local Backend API
+    // 1. Primary: Try Supabase Auth First
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: trimmedEmail,
+        password,
+      });
+
+      if (!error && data?.user) {
+        if (data.session?.access_token) {
+          localStorage.setItem('employee_token', data.session.access_token);
+        }
+
+        const profile = await fetchSupabaseProfile(data.user.id, trimmedEmail);
+        if (profile) {
+          setUser(profile);
+          localStorage.setItem('pg_user', JSON.stringify(profile));
+          const derivedRole: UserRole = profile.is_admin ? 'admin' : 'employee';
+          return { ok: true, role: derivedRole };
+        }
+
+        // Fallback user profile if database row not present yet
+        const isAdminEmail = trimmedEmail.toLowerCase().includes('admin');
+        const fallbackUser: AuthUser = {
+          id: data.user.id,
+          email: trimmedEmail,
+          is_admin: isAdminEmail,
+          is_active: true,
+        };
+        setUser(fallbackUser);
+        localStorage.setItem('pg_user', JSON.stringify(fallbackUser));
+        return { ok: true, role: isAdminEmail ? 'admin' : 'employee' };
+      }
+    } catch {
+      // Supabase connection issue, attempt fallback
+    }
+
+    // 2. Fallback: Try Local Backend API
     try {
       const loginRes = await apiFetch('/auth/login', {
         method: 'POST',
@@ -237,46 +281,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
     } catch {
-      // Local backend unavailable or failed, try Supabase next
+      // Both attempts failed
     }
 
-    // 2. Try Supabase Auth
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: trimmedEmail,
-        password,
-      });
-
-      if (error || !data.user) {
-        return { ok: false, role: null, detail: error?.message ?? 'Invalid credentials.' };
-      }
-
-      if (data.session?.access_token) {
-        localStorage.setItem('employee_token', data.session.access_token);
-      }
-
-      const profile = await fetchSupabaseProfile(data.user.id, trimmedEmail);
-      if (profile) {
-        setUser(profile);
-        localStorage.setItem('pg_user', JSON.stringify(profile));
-        const derivedRole: UserRole = profile.is_admin ? 'admin' : 'employee';
-        return { ok: true, role: derivedRole };
-      }
-
-      // Fallback user object
-      const isAdminEmail = trimmedEmail.toLowerCase().includes('admin');
-      const fallbackUser: AuthUser = {
-        id: data.user.id,
-        email: trimmedEmail,
-        is_admin: isAdminEmail,
-        is_active: true,
-      };
-      setUser(fallbackUser);
-      localStorage.setItem('pg_user', JSON.stringify(fallbackUser));
-      return { ok: true, role: isAdminEmail ? 'admin' : 'employee' };
-    } catch (err) {
-      return { ok: false, role: null, detail: 'Could not connect to authentication server.' };
-    }
+    return { ok: false, role: null, detail: 'Invalid email or password.' };
   }, []);
 
   // ── Logout ─────────────────────────────────────────────────────────────────

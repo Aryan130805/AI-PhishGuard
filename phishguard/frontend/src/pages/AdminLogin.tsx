@@ -5,6 +5,8 @@ import { Shield, Key, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../components/ui/Toast';
 import { useAuth } from '../AuthContext';
+import { supabase } from '../lib/supabase';
+import { apiFetch } from '../lib/api';
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -33,8 +35,7 @@ export default function AdminLogin() {
           description: 'This portal requires admin privileges.',
           type: 'error'
         });
-        // Log them out so no session lingers
-        await fetch('http://localhost:8000/auth/logout', { method: 'POST', credentials: 'include' });
+        await supabase.auth.signOut().catch(() => {});
       }
     } else {
       addToast({ title: 'Login Failed', description: result.detail || 'Invalid credentials.', type: 'error' });
@@ -50,16 +51,23 @@ export default function AdminLogin() {
     };
 
     try {
-      // 1. Try to register (idempotent)
-      await fetch('http://localhost:8000/auth/register', {
+      // 1. Register test admin in Supabase Auth
+      const { data: supaData } = await supabase.auth.signUp({
+        email: testAdmin.email,
+        password: testAdmin.password,
+        options: { data: { role: 'admin', org_name: testAdmin.organization_name } }
+      }).catch(() => ({ data: null }));
+
+      const supabaseUid = supaData?.user?.id;
+
+      // 2. Register profile in backend database
+      await apiFetch('/auth/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(testAdmin),
-        credentials: 'include'
-      });
+        body: JSON.stringify({ ...testAdmin, supabase_uid: supabaseUid }),
+      }).catch(() => {});
     } catch { /* ignore */ }
 
-    // 2. Log in via context
+    // 3. Log in via context
     const result = await login(testAdmin.email, testAdmin.password);
     setIsLoading(false);
 

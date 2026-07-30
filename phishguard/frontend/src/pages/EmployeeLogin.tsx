@@ -5,6 +5,8 @@ import { ShieldCheck, Key, Mail, Building, UserPlus, LogIn } from 'lucide-react'
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../components/ui/Toast';
 import { useAuth } from '../AuthContext';
+import { supabase } from '../lib/supabase';
+import { apiFetch } from '../lib/api';
 
 export default function EmployeeLogin() {
   const navigate = useNavigate();
@@ -59,23 +61,31 @@ export default function EmployeeLogin() {
 
     setIsLoading(true);
     try {
-      const res = await fetch('http://localhost:8000/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          password,
-          organization_name: organizationName.trim() || 'Demo Org'
-        }),
-        credentials: 'include'
+      // 1. Create account in Supabase Auth
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: { data: { org_name: organizationName.trim() || 'Demo Org', role: 'employee' } },
       });
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
+      if (signUpError) {
         setIsLoading(false);
-        addToast({ title: 'Registration Failed', description: err.detail || 'Could not create account.', type: 'error' });
+        addToast({ title: 'Registration Failed', description: signUpError.message, type: 'error' });
         return;
       }
+
+      const supabaseUid = signUpData.user?.id;
+
+      // 2. Register profile row in backend database
+      await apiFetch('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+          organization_name: organizationName.trim() || 'Demo Org',
+          supabase_uid: supabaseUid
+        }),
+      }).catch(() => null);
 
       addToast({ title: 'Account Created!', description: 'Logging you in automatically...', type: 'success' });
 

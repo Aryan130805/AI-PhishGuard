@@ -70,7 +70,8 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
         hashed_password=hashed_pwd,
         organization_id=org.id,
         role_id=assigned_role.id,
-        is_admin=is_admin_flag
+        is_admin=is_admin_flag,
+        supabase_uid=payload.supabase_uid
     )
     db.add(user)
     db.commit()
@@ -126,7 +127,8 @@ def register_employee(payload: EmployeeRegister, db: Session = Depends(get_db)):
         department_id=dept_id,
         role_id=employee_role.id,
         is_admin=False,
-        is_active=False
+        is_active=False,
+        supabase_uid=payload.supabase_uid
     )
     db.add(user)
     db.commit()
@@ -182,7 +184,8 @@ def register_organization(payload: OrganizationRegister, db: Session = Depends(g
         hashed_password=hashed_pwd,
         organization_id=org.id,
         role_id=admin_role.id,
-        is_admin=True
+        is_admin=True,
+        supabase_uid=payload.supabase_uid
     )
     db.add(user)
     db.commit()

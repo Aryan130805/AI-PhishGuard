@@ -72,7 +72,7 @@ function riskBgStyle(score: number): React.CSSProperties {
   return { background: 'rgba(239,68,68,0.12)', borderColor: 'rgba(239,68,68,0.25)' };
 }
 
-const API_BASE = 'http://localhost:8000';
+import { API_BASE } from '../lib/api';
 
 // ─── Component ────────────────────────────────────────────────────────────────
 

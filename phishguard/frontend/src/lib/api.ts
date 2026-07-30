@@ -6,7 +6,12 @@
  * In production, set VITE_API_BASE_URL in your build environment.
  */
 
-export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
+const isLocalhost = typeof window !== 'undefined' && 
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+export const API_BASE = 
+  import.meta.env.VITE_API_BASE_URL || 
+  (isLocalhost ? 'http://localhost:8000' : '/api');
 
 /**
  * Wrapper around fetch that:
@@ -33,9 +38,14 @@ export async function apiFetch(
     headers['Content-Type'] = 'application/json';
   }
 
-  return fetch(`${API_BASE}${path}`, {
+  const url = path.startsWith('http://') || path.startsWith('https://') 
+    ? path 
+    : `${API_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
+
+  return fetch(url, {
     ...options,
     headers,
     credentials: 'include',
   });
 }
+

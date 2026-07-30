@@ -5,6 +5,7 @@ import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Modal } from '../components/ui/Modal';
 import { useToast } from '../components/ui/Toast';
+import { apiFetch } from '../lib/api';
 import { 
   Mail, Plus, Play, Pause, Copy, Trash2, Calendar, 
   Clock, CheckCircle, AlertTriangle, Users, Info, Settings, ArrowRight, ShieldCheck
@@ -60,14 +61,7 @@ export default function AdminCampaigns() {
 
   // Authentication and API Fetch Wrapper
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
-    return fetch(`http://localhost:8000${url}`, {
-      ...options,
-      credentials: 'include',
-      headers: {
-        ...options.headers,
-        'Content-Type': 'application/json',
-      }
-    });
+    return apiFetch(url, options);
   };
 
   const loadData = async () => {

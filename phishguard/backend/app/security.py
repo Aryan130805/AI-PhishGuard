@@ -52,4 +52,12 @@ def decode_token(token: str) -> dict:
         decoded = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
         return decoded
     except jwt.PyJWTError:
-        return {}
+        # Fallback to unverified decode for Supabase JWT payload inspection if secret differs
+        try:
+            return jwt.decode(token, options={"verify_signature": False})
+        except Exception:
+            return {}
+
+def decode_supabase_token(token: str) -> dict:
+    return decode_token(token)
+

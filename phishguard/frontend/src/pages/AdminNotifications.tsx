@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Bell, CheckCheck, Mail, Award, BookOpen, ShieldAlert, Circle, CheckCircle } from 'lucide-react';
 import { useToast } from '../components/ui/Toast';
+import { apiFetch } from '../lib/api';
 
 interface NotificationItem {
   id: number;
@@ -43,14 +44,8 @@ export default function AdminNotifications() {
   const fetchNotifications = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch('http://localhost:8000/notifications', {
-        headers,
-        credentials: 'include'
-      });
-      if (res.ok) {
+      const res = await apiFetch('/notifications').catch(() => null);
+      if (res && res.ok) {
         setNotifications(await res.json());
       }
     } catch {
@@ -61,28 +56,14 @@ export default function AdminNotifications() {
   };
 
   const markRead = async (id: number) => {
-    const token = localStorage.getItem('token');
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    await fetch(`http://localhost:8000/notifications/${id}/read`, {
-      method: 'POST',
-      headers,
-      credentials: 'include'
-    });
+    await apiFetch(`/notifications/${id}/read`, { method: 'POST' }).catch(() => null);
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
   };
 
   const markAllRead = async () => {
     setMarkingAll(true);
     try {
-      const token = localStorage.getItem('token');
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      await fetch('http://localhost:8000/notifications/read-all', {
-        method: 'POST',
-        headers,
-        credentials: 'include'
-      });
+      await apiFetch('/notifications/read-all', { method: 'POST' }).catch(() => null);
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
       success('All notifications marked as read.');
     } finally {

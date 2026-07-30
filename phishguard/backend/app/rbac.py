@@ -31,16 +31,30 @@ def get_current_user(
         raise credentials_exception
 
     payload = decode_token(token)
-    user_id = payload.get("sub")
-    token_type = payload.get("type")
-    
-    if user_id is None or token_type != "access":
+    if not payload:
         raise credentials_exception
-        
-    try:
-        user = db.query(User).filter(User.id == int(user_id)).first()
-    except ValueError:
+
+    sub = payload.get("sub")
+    email = payload.get("email") or payload.get("user_metadata", {}).get("email")
+
+    if not sub and not email:
         raise credentials_exception
+
+    user = None
+    # 1. Try matching by supabase_uid
+    if sub:
+        user = db.query(User).filter(User.supabase_uid == str(sub)).first()
+
+    # 2. Try matching by email
+    if not user and email:
+        user = db.query(User).filter(User.email == str(email)).first()
+
+    # 3. Try matching by integer primary key id (legacy local tokens)
+    if not user and sub:
+        try:
+            user = db.query(User).filter(User.id == int(sub)).first()
+        except ValueError:
+            pass
 
     if user is None:
         raise credentials_exception

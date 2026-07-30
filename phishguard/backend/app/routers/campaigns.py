@@ -61,6 +61,7 @@ def validate_status_transition(current_status: CampaignStatus, new_status: Campa
         )
 
 @router.post("", status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED)
 def create_campaign(
     payload: CampaignCreate,
     db: Session = Depends(get_db),

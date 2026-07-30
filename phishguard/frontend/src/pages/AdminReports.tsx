@@ -28,7 +28,7 @@ interface ReportRow {
 
 interface DeptOption { department_id: number; department_name: string; }
 
-const API_BASE = 'http://localhost:8000';
+import { API_BASE, apiFetch } from '../lib/api';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

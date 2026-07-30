@@ -585,6 +585,33 @@ export default function EmployeeLessons() {
     'Workplace Security'
   ];
 
+  const resolveCategory = (l: any): string => {
+    const cat = l.category;
+    if (cat && typeof cat === 'string' && cat.trim() !== '' && cat !== 'All') {
+      if (categories.includes(cat)) {
+        return cat;
+      }
+    }
+
+    const topic = (l.topic || '').toLowerCase();
+    const title = (l.title || '').toLowerCase();
+
+    if (topic.includes('phish') || title.includes('phish') || title.includes('quish')) return 'Phishing Attacks';
+    if (topic.includes('malware') || topic.includes('ransomware') || title.includes('ransomware') || title.includes('trojan')) return 'Malware & Ransomware';
+    if (topic.includes('password') || topic.includes('mfa') || title.includes('password') || title.includes('authentication')) return 'Password & Authentication Security';
+    if (topic.includes('social') || topic.includes('pretext') || title.includes('vishing') || title.includes('impersonation')) return 'Social Engineering';
+    if (topic.includes('network') || topic.includes('wifi') || title.includes('wi-fi') || title.includes('vpn')) return 'Network Security';
+    if (topic.includes('cloud') || title.includes('cloud') || title.includes('iam') || title.includes('s3')) return 'Cloud Security';
+    if (topic.includes('ai') || title.includes('ai') || title.includes('deepfake')) return 'AI & Modern Cyber Threats';
+    if (topic.includes('mobile') || title.includes('mobile') || title.includes('smishing')) return 'Mobile Security';
+    if (topic.includes('workplace') || title.includes('clean desk') || title.includes('tailgating') || topic.includes('incident') || title.includes('dlp')) return 'Workplace Security';
+
+    const matchFallback = FALLBACK_LESSONS.find(f => f.id === l.id);
+    if (matchFallback) return matchFallback.category;
+
+    return 'Phishing Attacks';
+  };
+
   useEffect(() => {
     fetchLessons();
     fetchAdaptiveProfile();
@@ -607,9 +634,13 @@ export default function EmployeeLessons() {
       if (res && res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
-          setLessons(data);
-          if (!selectedLesson || !data.some((d: any) => d.id === selectedLesson.id)) {
-            handleSelectLesson(data[0].id, data[0]);
+          const formattedData = data.map((d: any) => ({
+            ...d,
+            category: resolveCategory(d)
+          }));
+          setLessons(formattedData);
+          if (!selectedLesson || !formattedData.some((d: any) => d.id === selectedLesson.id)) {
+            handleSelectLesson(formattedData[0].id, formattedData[0]);
           }
           setIsLoading(false);
           return;
@@ -627,7 +658,7 @@ export default function EmployeeLessons() {
           id: l.id,
           topic: l.topic || 'general_security',
           title: l.title || 'Security Awareness Module',
-          category: l.category || 'Phishing Attacks',
+          category: resolveCategory(l),
           difficulty: l.difficulty || 'Beginner',
           summary: l.summary || l.title,
           is_emerging_threat: Boolean(l.is_emerging_threat),
@@ -684,10 +715,6 @@ export default function EmployeeLessons() {
     }
     if (selectedDifficulty && selectedDifficulty !== 'All') {
       filteredFallback = filteredFallback.filter(l => l.difficulty === selectedDifficulty);
-    }
-
-    if (filteredFallback.length === 0) {
-      filteredFallback = FALLBACK_LESSONS;
     }
 
     setLessons(filteredFallback);

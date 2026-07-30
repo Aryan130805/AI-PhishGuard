@@ -616,20 +616,14 @@ export default function EmployeeLessons() {
     fetchLessons();
     fetchAdaptiveProfile();
     fetchEmergingThreats();
-  }, [selectedCategory, selectedDifficulty]);
+  }, []);
 
   const fetchLessons = async () => {
     setIsLoading(true);
 
     // 1. Try API first
     try {
-      const params = new URLSearchParams();
-      if (selectedCategory && selectedCategory !== 'All') params.append('category', selectedCategory);
-      if (selectedDifficulty && selectedDifficulty !== 'All') params.append('difficulty', selectedDifficulty);
-
-      const queryString = params.toString();
-      const url = `/training/lessons${queryString ? `?${queryString}` : ''}`;
-
+      const url = '/training/lessons';
       const res = await apiFetch(url).catch(() => null);
       if (res && res.ok) {
         const data = await res.json();
@@ -668,58 +662,40 @@ export default function EmployeeLessons() {
           completed: false
         }));
 
-        let filtered = formatted;
-        if (selectedCategory && selectedCategory !== 'All') {
-          filtered = filtered.filter(l => l.category === selectedCategory);
-        }
-        if (selectedDifficulty && selectedDifficulty !== 'All') {
-          filtered = filtered.filter(l => l.difficulty === selectedDifficulty);
-        }
-
-        if (filtered.length > 0) {
-          setLessons(filtered);
-          const first = filtered[0];
-          const detailed = supaLessons.find((sl: any) => sl.id === first.id);
-          setSelectedLesson({
+        setLessons(formatted);
+        const first = formatted[0];
+        const detailed = supaLessons.find((sl: any) => sl.id === first.id);
+        setSelectedLesson({
+          id: first.id,
+          topic: first.topic,
+          title: first.title,
+          category: first.category,
+          difficulty: first.difficulty,
+          summary: first.summary,
+          content: detailed?.content || '<p>Security awareness training module content.</p>',
+          completed: false,
+          quiz: {
             id: first.id,
-            topic: first.topic,
-            title: first.title,
-            category: first.category,
-            difficulty: first.difficulty,
-            summary: first.summary,
-            content: detailed?.content || '<p>Security awareness training module content.</p>',
-            completed: false,
-            quiz: {
-              id: first.id,
-              questions: detailed?.quiz || [
-                {
-                  question: `What is the key security control for ${first.title}?`,
-                  options: ["Verify out-of-band and report suspicious activity", "Ignore alerts", "Share passwords", "Disable antivirus"],
-                  correct_index: 0
-                }
-              ]
-            }
-          });
-          setIsLoading(false);
-          return;
-        }
+            questions: detailed?.quiz || [
+              {
+                question: `What is the key security control for ${first.title}?`,
+                options: ["Verify out-of-band and report suspicious activity", "Ignore alerts", "Share passwords", "Disable antivirus"],
+                correct_index: 0
+              }
+            ]
+          }
+        });
+        setIsLoading(false);
+        return;
       }
     } catch {
       // ignore
     }
 
-    // 3. Built-in Fallback Curriculum (Guarantees courses for ALL categories!)
-    let filteredFallback = FALLBACK_LESSONS;
-    if (selectedCategory && selectedCategory !== 'All') {
-      filteredFallback = filteredFallback.filter(l => l.category === selectedCategory);
-    }
-    if (selectedDifficulty && selectedDifficulty !== 'All') {
-      filteredFallback = filteredFallback.filter(l => l.difficulty === selectedDifficulty);
-    }
-
-    setLessons(filteredFallback);
-    if (filteredFallback.length > 0) {
-      const first = filteredFallback[0];
+    // 3. Built-in Fallback Curriculum (Guarantees master list for ALL categories!)
+    setLessons(FALLBACK_LESSONS);
+    if (FALLBACK_LESSONS.length > 0) {
+      const first = FALLBACK_LESSONS[0];
       setSelectedLesson({
         id: first.id,
         topic: first.topic,
@@ -878,11 +854,15 @@ export default function EmployeeLessons() {
     }
   };
 
-  const filteredLessons = lessons.filter(l => 
-    l.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    l.summary.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    l.category.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredLessons = lessons.filter(l => {
+    const matchesCategory = selectedCategory === 'All' || l.category === selectedCategory;
+    const matchesDifficulty = selectedDifficulty === 'All' || l.difficulty === selectedDifficulty;
+    const matchesSearch = searchQuery === '' || 
+      l.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      l.summary.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      l.category.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesDifficulty && matchesSearch;
+  });
 
   const getCategoryIcon = (category: string) => {
     switch (category) {

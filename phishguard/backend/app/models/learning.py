@@ -21,17 +21,29 @@ class Lesson(Base):
     is_emerging_threat = Column(Boolean, default=False)
     cve_id = Column(String, nullable=True)
     published_date = Column(String, nullable=True)
+    is_public = Column(Boolean, default=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True)
 
     quizzes = relationship("Quiz", back_populates="lesson", cascade="all, delete-orphan")
+    organization = relationship("Organization")
 
 class Quiz(Base):
     __tablename__ = "quizzes"
 
     id = Column(Integer, primary_key=True, index=True)
-    lesson_id = Column(Integer, ForeignKey("lessons.id", ondelete="CASCADE"), nullable=False)
+    lesson_id = Column(Integer, ForeignKey("lessons.id", ondelete="CASCADE"), nullable=True)
+    title = Column(String, nullable=True)
+    category = Column(String, default="Phishing Attacks")
+    difficulty = Column(String, default="Beginner")
+    summary = Column(String, nullable=True)
+    time_estimate = Column(String, default="5 mins")
+    pass_score = Column(Integer, default=75)
     questions = Column(JSON_TYPE, nullable=False)
+    is_public = Column(Boolean, default=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True)
 
     lesson = relationship("Lesson", back_populates="quizzes")
+    organization = relationship("Organization")
 
 class QuizAttempt(Base):
     __tablename__ = "quiz_attempts"

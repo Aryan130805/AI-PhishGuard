@@ -33,6 +33,43 @@ class BaseAIProvider(abc.ABC):
     def generate_completion(self, system_prompt: str, user_prompt: str) -> str:
         pass
 
+class GeminiProvider(BaseAIProvider):
+    def generate_completion(self, system_prompt: str, user_prompt: str) -> str:
+        if not settings.GEMINI_API_KEY:
+            raise AIProviderError("GEMINI_API_KEY is not set")
+        
+        model = settings.GEMINI_MODEL or "gemini-2.0-flash"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={settings.GEMINI_API_KEY}"
+        
+        payload = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": user_prompt}]
+                }
+            ],
+            "systemInstruction": {
+                "parts": [{"text": system_prompt}]
+            },
+            "generationConfig": {
+                "responseMimeType": "application/json"
+            }
+        }
+        
+        try:
+            response = httpx.post(url, json=payload, timeout=60.0)
+            response.raise_for_status()
+            data = response.json()
+            candidates = data.get("candidates", [])
+            if not candidates:
+                raise AIProviderError("Gemini returned empty candidates")
+            parts = candidates[0].get("content", {}).get("parts", [])
+            if not parts:
+                raise AIProviderError("Gemini response missing parts")
+            return parts[0].get("text", "")
+        except Exception as e:
+            raise AIProviderError(f"Gemini API call failed: {str(e)}")
+
 class OpenAIProvider(BaseAIProvider):
     def generate_completion(self, system_prompt: str, user_prompt: str) -> str:
         if not settings.OPENAI_API_KEY:
@@ -92,6 +129,7 @@ class LlamaProvider(BaseAIProvider):
             return data["choices"][0]["message"]["content"]
         except Exception as e:
             raise AIProviderError(f"Llama API call failed: {str(e)}")
+
 
 SYSTEM_PROMPT = """
 You are an expert security awareness training simulation engine.
@@ -179,7 +217,9 @@ Do not output any introductory or concluding text, only the valid raw JSON objec
 class AIGeneratorService:
     def __init__(self):
         provider_name = settings.AI_PROVIDER.lower()
-        if provider_name == "openai":
+        if provider_name == "gemini":
+            self.provider = GeminiProvider()
+        elif provider_name == "openai":
             self.provider = OpenAIProvider()
         elif provider_name == "llama":
             self.provider = LlamaProvider()

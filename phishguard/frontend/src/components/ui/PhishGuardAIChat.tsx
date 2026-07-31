@@ -3,6 +3,7 @@ import {
   Sparkles, X, Send, Bot, User, Trash2, Shield, Zap, Check, Copy, RefreshCw, ChevronDown
 } from 'lucide-react';
 import { useAuth } from '../../AuthContext';
+import { apiFetch } from '../../lib/api';
 
 interface Message {
   id: string;
@@ -159,7 +160,7 @@ Here are essential recommendations:
 *Would you like to analyze a specific email header, review password policies, or run a simulated quiz?*`;
   };
 
-  const handleSend = (textToSend?: string) => {
+  const handleSend = async (textToSend?: string) => {
     const text = textToSend || inputMessage;
     if (!text.trim()) return;
 
@@ -170,22 +171,57 @@ Here are essential recommendations:
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-    setMessages(prev => [...prev, userMsg]);
+    const currentMessages = [...messages, userMsg];
+    setMessages(currentMessages);
     if (!textToSend) setInputMessage('');
     setIsTyping(true);
 
-    // Simulate AI response delay
-    setTimeout(() => {
-      const aiReplyText = generateGeminiResponse(text);
+    try {
+      const historyPayload = messages.map(m => ({
+        sender: m.sender,
+        text: m.text
+      }));
+
+      const res = await apiFetch('/chat', {
+        method: 'POST',
+        body: JSON.stringify({
+          message: text.trim(),
+          history: historyPayload
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const aiMsg: Message = {
+          id: (Date.now() + 1).toString(),
+          sender: 'ai',
+          text: data.reply || generateGeminiResponse(text),
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        setMessages(prev => [...prev, aiMsg]);
+      } else {
+        const fallbackText = generateGeminiResponse(text);
+        const aiMsg: Message = {
+          id: (Date.now() + 1).toString(),
+          sender: 'ai',
+          text: fallbackText,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        setMessages(prev => [...prev, aiMsg]);
+      }
+    } catch (err) {
+      console.error('Chat API request error:', err);
+      const fallbackText = generateGeminiResponse(text);
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         sender: 'ai',
-        text: aiReplyText,
+        text: fallbackText,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       setMessages(prev => [...prev, aiMsg]);
+    } finally {
       setIsTyping(false);
-    }, 900);
+    }
   };
 
   const handleCopy = (id: string, text: string) => {

@@ -14,7 +14,14 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
         secure: false,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            // Forward cookies to backend
+            proxyReq.setHeader('x-forwarded-proto', 'http');
+          });
+        },
       },
     },
   },
 })
+

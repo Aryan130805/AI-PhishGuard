@@ -4,7 +4,7 @@ import {
   Shield, Menu, X, LogOut, Home, Target, Mail, FileCode, Sparkles,
   Users, Building2, UserCheck, Brain, Bot, FileText, TrendingUp,
   BarChart3, Flame, Activity, GraduationCap, Workflow, HelpCircle,
-  Award, ChevronDown, User, CreditCard, Settings, LogIn
+  Award, ChevronDown, User, CreditCard, Settings, LogIn, BookOpen
 } from 'lucide-react';
 import NotificationBell from '../components/ui/NotificationBell';
 import PhishGuardAIChat from '../components/ui/PhishGuardAIChat';
@@ -81,9 +81,9 @@ export default function AdminLayout() {
       category: 'Learning',
       icon: GraduationCap,
       items: [
-        { name: 'Adaptive Learning', to: '/admin/adaptive-learning', icon: Workflow, description: 'Adaptive training rules' },
-        { name: 'Quizzes', to: '/admin/quizzes', icon: HelpCircle, description: 'Knowledge assessments' },
-        { name: 'Progress', to: '/admin/learning-progress', icon: Award, description: 'Training certificates & ranks' },
+        { name: 'Adaptive Learning', to: '/admin/learning', icon: Workflow, description: 'Organization adaptive learning management' },
+        { name: 'Quizzes', to: '/admin/quizzes', icon: HelpCircle, description: 'Organization quiz management' },
+        { name: 'Progress', to: '/admin/learning-progress', icon: Award, description: 'Training metrics & completions' },
       ],
     },
   ];

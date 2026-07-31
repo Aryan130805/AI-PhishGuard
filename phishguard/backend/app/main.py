@@ -11,22 +11,13 @@ import redis
 
 from app.logging_config import setup_logging, LoggingMiddleware
 from app.exceptions import add_exception_handlers
-from app.routers import auth, users, campaigns, templates, tracking, extension, analytics, risk, training, notifications, reports, organizations
+from app.routers import auth, users, campaigns, templates, tracking, extension, analytics, risk, training, notifications, reports, organizations, chat
 
 def create_app() -> FastAPI:
     # Setup structured logging configuration
     setup_logging()
 
     app = FastAPI(title=settings.PROJECT_NAME)
-
-    # Middleware to strip optional /api prefix for unified backend routes
-    @app.middleware("http")
-    async def strip_api_prefix(request: Request, call_next):
-        if request.url.path.startswith("/api/"):
-            request.scope["path"] = request.url.path[4:]
-        elif request.url.path == "/api":
-            request.scope["path"] = "/"
-        return await call_next(request)
 
     # Setup CORS middleware to allow cross-origin credentials (cookies)
     from fastapi.middleware.cors import CORSMiddleware
@@ -48,6 +39,15 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Middleware to strip optional /api prefix for unified backend routes
+    @app.middleware("http")
+    async def strip_api_prefix(request: Request, call_next):
+        if request.url.path.startswith("/api/"):
+            request.scope["path"] = request.url.path[4:]
+        elif request.url.path == "/api":
+            request.scope["path"] = "/"
+        return await call_next(request)
+
     # Wire Logging middleware
     app.add_middleware(LoggingMiddleware)
 
@@ -68,6 +68,7 @@ def create_app() -> FastAPI:
     app.include_router(notifications.router)
     app.include_router(reports.router)
     app.include_router(organizations.router)
+    app.include_router(chat.router)
 
     @app.on_event("startup")
     def sync_db_columns():
@@ -114,10 +115,28 @@ def create_app() -> FastAPI:
                         ("is_emerging_threat", "BOOLEAN DEFAULT 0"),
                         ("cve_id", "VARCHAR"),
                         ("published_date", "VARCHAR"),
+                        ("is_public", "BOOLEAN DEFAULT 1"),
+                        ("organization_id", "INTEGER"),
                     ]
                     for col_name, col_type in lesson_cols:
                         if col_name not in cols:
                             conn.execute(text(f"ALTER TABLE lessons ADD COLUMN {col_name} {col_type}"))
+
+                if "quizzes" in inspector.get_table_names():
+                    cols = [c["name"] for c in inspector.get_columns("quizzes")]
+                    quiz_cols = [
+                        ("title", "VARCHAR"),
+                        ("category", "VARCHAR DEFAULT 'Phishing Attacks'"),
+                        ("difficulty", "VARCHAR DEFAULT 'Beginner'"),
+                        ("summary", "VARCHAR"),
+                        ("time_estimate", "VARCHAR DEFAULT '5 mins'"),
+                        ("pass_score", "INTEGER DEFAULT 75"),
+                        ("is_public", "BOOLEAN DEFAULT 1"),
+                        ("organization_id", "INTEGER"),
+                    ]
+                    for col_name, col_type in quiz_cols:
+                        if col_name not in cols:
+                            conn.execute(text(f"ALTER TABLE quizzes ADD COLUMN {col_name} {col_type}"))
                 conn.commit()
         except Exception as e:
             print(f"[startup] SQLite column sync warning: {e}")

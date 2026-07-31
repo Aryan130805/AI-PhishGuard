@@ -3,7 +3,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../co
 import { Button } from '../components/ui/Button';
 import { 
   BookOpen, CheckCircle, ArrowRight, ArrowLeft, ChevronRight, BookOpenCheck, HelpCircle, Shield, 
-  Sparkles, Flame, Award, AlertTriangle, Search, Plus, Edit3, Trash2, 
+  Sparkles, Flame, Award, AlertTriangle, Search, Plus, Edit3, Trash2, Filter,
   Zap, Lock, Smartphone, Wifi, Cloud, Bot, Eye, KeyRound, AlertCircle, Play, UserCheck
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -569,8 +569,55 @@ export default function EmployeeLessons() {
   const [newDifficulty, setNewDifficulty] = useState('Beginner');
   const [newSummary, setNewSummary] = useState('');
   const [newContent, setNewContent] = useState('');
+  const [isPublic, setIsPublic] = useState(true);
 
   const isAdmin = user?.role === 'admin';
+
+  const handleCreateModule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle || !newContent) {
+      addToast({ title: 'Missing Information', description: 'Please provide lesson title and content.', type: 'error' });
+      return;
+    }
+
+    try {
+      const res = await apiFetch('/training/lessons', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: newTitle,
+          topic: newCategory.toLowerCase().replace(/ /g, '_'),
+          category: newCategory,
+          difficulty: newDifficulty,
+          summary: newSummary,
+          content: newContent,
+          is_public: isPublic,
+          quiz: [
+            {
+              question: `What is the primary key defense regarding ${newTitle}?`,
+              options: [
+                "Always verify via secondary channel and report anomalies to IT Security",
+                "Ignore warnings and click links directly",
+                "Share credentials with unverified external contacts",
+                "Disable all antivirus software"
+              ],
+              correct_index: 0
+            }
+          ]
+        })
+      });
+
+      if (res.ok) {
+        addToast({ title: 'Module Published!', description: `Successfully created ${isPublic ? 'Public' : 'Organization Private'} security lesson "${newTitle}".`, type: 'success' });
+        setNewTitle('');
+        setNewSummary('');
+        setNewContent('');
+        fetchLessons();
+        fetchAdaptiveProfile();
+      }
+    } catch (e) {
+      addToast({ title: 'Failed', description: 'Could not create security lesson.', type: 'error' });
+    }
+  };
 
   const categories = [
     'All',
@@ -809,51 +856,6 @@ export default function EmployeeLessons() {
     }
   };
 
-  const handleCreateModule = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTitle || !newContent) {
-      addToast({ title: 'Missing Information', description: 'Please provide lesson title and content.', type: 'error' });
-      return;
-    }
-
-    try {
-      const res = await apiFetch('/training/lessons', {
-        method: 'POST',
-        body: JSON.stringify({
-          title: newTitle,
-          topic: newCategory.toLowerCase().replace(/ /g, '_'),
-          category: newCategory,
-          difficulty: newDifficulty,
-          summary: newSummary,
-          content: newContent,
-          quiz: [
-            {
-              question: `What is the primary key defense regarding ${newTitle}?`,
-              options: [
-                "Always verify via secondary channel and report anomalies to IT Security",
-                "Ignore warnings and click links directly",
-                "Share credentials with unverified external contacts",
-                "Disable all antivirus software"
-              ],
-              correct_index: 0
-            }
-          ]
-        })
-      });
-
-      if (res.ok) {
-        addToast({ title: 'Module Published!', description: `Successfully created security lesson "${newTitle}".`, type: 'success' });
-        setNewTitle('');
-        setNewSummary('');
-        setNewContent('');
-        fetchLessons();
-        fetchAdaptiveProfile();
-      }
-    } catch (e) {
-      addToast({ title: 'Failed', description: 'Could not create security lesson.', type: 'error' });
-    }
-  };
-
   const filteredLessons = lessons.filter(l => {
     const matchesCategory = selectedCategory === 'All' || l.category === selectedCategory;
     const matchesDifficulty = selectedDifficulty === 'All' || l.difficulty === selectedDifficulty;
@@ -1003,275 +1005,310 @@ export default function EmployeeLessons() {
         </div>
       )}
 
-      {/* ── TAB 1: CURRICULUM MODULES ── */}
-      {activeTab === 'modules' && (
-        <div className="flex gap-6 items-start">
-
-          {/* ── LEFT SIDEBAR: Category Nav OR Courses List ── */}
-          <div className="w-72 flex-shrink-0 space-y-3 sticky top-4">
-
-            {sidebarView === 'categories' ? (
-              /* ── VIEW 1: CATEGORIES SELECTION ── */
-              <div className="space-y-3">
-                <div className="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden shadow-xl backdrop-blur-md">
-                  <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <BookOpen size={16} className="text-blue-400" />
-                      <p className="text-xs font-black text-white uppercase tracking-wider">Select Category</p>
-                    </div>
-                    <span className="text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full">
-                      {categories.length - 1} Topics
-                    </span>
-                  </div>
-
-                  <div className="p-2 space-y-1 max-h-[580px] overflow-y-auto">
-                    {categories.map(cat => {
-                      const count = cat === 'All' 
-                        ? lessons.length 
-                        : lessons.filter(l => l.category === cat).length;
-                      return (
-                        <button
-                          key={cat}
-                          onClick={() => {
-                            setSelectedCategory(cat);
-                            setSidebarView('courses');
-                          }}
-                          className={`w-full text-left p-3 rounded-xl transition-all duration-200 flex items-center gap-3 border ${
-                            selectedCategory === cat && cat !== 'All'
-                              ? 'bg-blue-600/20 border-blue-500/50 text-white shadow-md'
-                              : 'bg-slate-900/40 hover:bg-slate-800/80 border-slate-800/80 hover:border-slate-700 text-slate-300'
-                          } group`}
-                        >
-                          <div className="p-2 rounded-lg bg-slate-800/90 group-hover:bg-blue-600/30 text-blue-400 shrink-0 transition-colors">
-                            {cat !== 'All' ? getCategoryIcon(cat) : <BookOpen size={16} />}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="truncate font-extrabold text-white text-xs leading-snug">{cat}</p>
-                            <p className="text-[10px] text-slate-500 font-semibold">{count} {count === 1 ? 'Course' : 'Courses'}</p>
-                          </div>
-                          <ChevronRight size={14} className="text-slate-600 group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all" />
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+      {/* ── Active Learning Module Reader View Modal Overlay (Identical to Quiz Runner Modal) ── */}
+      {selectedLesson && (
+        <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <Card className="w-full max-w-4xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden my-auto max-h-[90vh] flex flex-col">
+            
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-md flex items-center gap-1.5">
+                  {getCategoryIcon(selectedLesson.category)}
+                  {selectedLesson.category}
+                </span>
+                <span className="text-[10px] font-bold px-2 py-1 bg-slate-800 text-slate-300 rounded-md">
+                  {selectedLesson.difficulty} Level
+                </span>
               </div>
-            ) : (
-              /* ── VIEW 2: AVAILABLE COURSES IN SELECTED CATEGORY ── */
-              <div className="space-y-3">
-                {/* 1. Search Bar */}
-                <div className="relative">
-                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                  <input
-                    type="text"
-                    placeholder="Search courses..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 shadow-sm"
-                  />
-                </div>
 
-                {/* 2. Difficulty Selector */}
-                <select
-                  value={selectedDifficulty}
-                  onChange={(e) => setSelectedDifficulty(e.target.value)}
-                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-blue-500 shadow-sm"
-                >
-                  <option value="All">All Difficulty Tiers</option>
-                  <option value="Beginner">Beginner</option>
-                  <option value="Intermediate">Intermediate</option>
-                  <option value="Advanced">Advanced</option>
-                  <option value="Expert">Expert</option>
-                </select>
+              <Button
+                variant="outline"
+                onClick={() => setSelectedLesson(null)}
+                className="border-slate-800 text-slate-400 hover:text-white text-xs px-3 py-1.5"
+              >
+                Close Briefing
+              </Button>
+            </div>
 
-                {/* 3. Integrated Selected Category Header with Back Action */}
-                <button
-                  onClick={() => setSidebarView('categories')}
-                  title="Click to view all categories"
-                  className="w-full px-3.5 py-2.5 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 hover:border-blue-500/40 rounded-xl flex items-center justify-between shadow-sm transition-all group cursor-pointer text-left"
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <ArrowLeft size={14} className="text-blue-400 group-hover:-translate-x-0.5 transition-transform shrink-0" />
-                    {getCategoryIcon(selectedCategory)}
-                    <span className="text-xs font-bold text-white group-hover:text-blue-300 transition-colors truncate">
-                      {selectedCategory}
-                    </span>
-                  </div>
-                  <span className="text-[10px] font-black text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 group-hover:bg-blue-500/20 transition-colors">
-                    {filteredLessons.length} Available
-                  </span>
-                </button>
-
-                {/* Available Courses List */}
-                <div className="space-y-2 max-h-[480px] overflow-y-auto pr-0.5">
-                  {isLoading ? (
-                    <p className="text-xs text-slate-500 px-2 py-4">Loading courses...</p>
-                  ) : filteredLessons.length === 0 ? (
-                    <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/30 text-center">
-                      <p className="text-xs text-slate-400">No courses match search filter.</p>
-                    </div>
-                  ) : (
-                    filteredLessons.map((lesson) => (
-                      <button
-                        key={lesson.id}
-                        onClick={() => handleSelectLesson(lesson.id)}
-                        className={`w-full text-left p-3.5 rounded-xl border transition-all duration-200 ${
-                          selectedLesson?.id === lesson.id
-                            ? 'border-blue-500/60 bg-blue-500/10 shadow-lg shadow-blue-500/10'
-                            : 'border-slate-800/80 bg-slate-900/40 text-slate-300 hover:border-slate-700 hover:bg-slate-900/70'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-1 mb-1.5">
-                          {lesson.completed ? (
-                            <span className="text-[9px] font-bold text-emerald-400 flex items-center gap-1 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                              <CheckCircle size={10} /> Done
-                            </span>
-                          ) : (
-                            <span className="text-[9px] font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
-                              {lesson.difficulty}
-                            </span>
-                          )}
-                          <span className="flex items-center gap-0.5 text-slate-500">
-                            {getCategoryIcon(lesson.category)}
-                          </span>
-                        </div>
-                        <h3 className="text-xs font-bold text-white leading-snug line-clamp-2">{lesson.title}</h3>
-                      </button>
-                    ))
+            {/* Modal Scrollable Body */}
+            <div className="p-6 sm:p-8 space-y-6 overflow-y-auto flex-1">
+              <div className="pb-4 border-b border-slate-800 flex justify-between items-start flex-wrap gap-4">
+                <div>
+                  <h2 className="text-2xl sm:text-3xl font-black text-white leading-tight">{selectedLesson.title}</h2>
+                  {selectedLesson.summary && (
+                    <p className="text-xs text-slate-400 mt-2">{selectedLesson.summary}</p>
                   )}
                 </div>
+
+                {selectedLesson.completed && (
+                  <span className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-400 px-3.5 py-2 bg-emerald-500/10 rounded-xl border border-emerald-500/30 shadow-inner shrink-0">
+                    <CheckCircle size={16} /> Certified Complete
+                  </span>
+                )}
+              </div>
+
+              {/* Render Lesson HTML Content */}
+              <div 
+                className="text-slate-300 text-sm leading-relaxed prose prose-invert max-w-none space-y-4"
+                dangerouslySetInnerHTML={{ __html: selectedLesson.content }}
+              />
+
+              {/* Interactive Exercises */}
+              {selectedLesson.category === 'Phishing Attacks' && (
+                <div className="p-5 rounded-2xl bg-slate-950/80 border border-blue-500/30 space-y-3">
+                  <div className="flex items-center gap-2 text-blue-400 font-bold text-xs">
+                    <Eye size={16} /> INTERACTIVE EXERCISE: Spot The Red Flag
+                  </div>
+                  <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 space-y-2">
+                    <p><strong>From:</strong> security-update@paypa1-verify.com</p>
+                    <p><strong>Subject:</strong> 🚨 Immediate Action Required: Account Suspended in 24 Hours</p>
+                    <p className="text-slate-400">"Dear Customer, we detected unauthorized attempts. Click <span className="text-blue-400 underline cursor-pointer" onClick={() => setEmailFlagged("Domain Spoofing Detected: 'paypa1-verify.com' is an external fake domain!")}>http://paypa1-verify.com/login</span> to verify password."</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={() => setEmailFlagged("Correct! The domain 'paypa1-verify.com' uses typosquatting to impersonate PayPal.")}
+                      className="bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white px-3 py-1.5"
+                    >
+                      Flag Typosquatted Domain
+                    </Button>
+                  </div>
+                  {emailFlagged && (
+                    <p className="text-xs font-bold text-emerald-400 bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20">{emailFlagged}</p>
+                  )}
+                </div>
+              )}
+
+              {selectedLesson.category === 'Password & Authentication Security' && (
+                <div className="p-5 rounded-2xl bg-slate-950/80 border border-emerald-500/30 space-y-3">
+                  <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs">
+                    <KeyRound size={16} /> INTERACTIVE EXERCISE: Real-Time Password Entropy Tester
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Type a sample password to test entropy..."
+                    value={testPassword}
+                    onChange={(e) => setTestPassword(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  />
+                  {testPassword && (
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs font-bold">
+                        <span className={calculatePasswordScore(testPassword).color}>
+                          {calculatePasswordScore(testPassword).text}
+                        </span>
+                        <span className="text-slate-400">{calculatePasswordScore(testPassword).score}% Score</span>
+                      </div>
+                      <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                        <div 
+                          className="bg-emerald-500 h-2 transition-all duration-300" 
+                          style={{ width: `${calculatePasswordScore(testPassword).score}%` }} 
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Quiz Link */}
+              {selectedLesson.quiz && selectedLesson.quiz.id ? (
+                <div className="pt-6 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="text-xs text-slate-400 flex items-center gap-2">
+                    <HelpCircle size={16} className="text-emerald-400" />
+                    <span>Interactive Knowledge Check • Pass threshold: <strong>70%+</strong></span>
+                  </div>
+                  <Link to={`/quizzes`} onClick={() => setSelectedLesson(null)}>
+                    <Button className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold px-6 py-3 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20">
+                      <Play size={16} /> Take Knowledge Quiz
+                    </Button>
+                  </Link>
+                </div>
+              ) : null}
+            </div>
+
+          </Card>
+        </div>
+      )}
+
+      {/* ── TAB 1: CURRICULUM MODULES ── */}
+      {activeTab === 'modules' && (
+        <div className="flex flex-col lg:flex-row gap-6 items-start">
+
+          {/* ── LEFT SIDEBAR: CATEGORY SELECTION MENU (Exact match to Quiz section!) ── */}
+          <div className="w-full lg:w-72 flex-shrink-0 space-y-4 lg:sticky lg:top-4">
+            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden shadow-xl backdrop-blur-md">
+              <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+                <div className="flex items-center gap-2">
+                  <BookOpen size={16} className="text-blue-400" />
+                  <p className="text-xs font-black text-white uppercase tracking-wider">Select Category</p>
+                </div>
+                <span className="text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full">
+                  {categories.length - 1} Topics
+                </span>
+              </div>
+
+              <div className="p-2 space-y-1 max-h-[580px] overflow-y-auto">
+                {categories.map((cat) => {
+                  const count = cat === 'All' 
+                    ? lessons.length 
+                    : lessons.filter(l => l.category === cat).length;
+                  const isSelected = selectedCategory === cat;
+
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`w-full text-left p-3 rounded-xl transition-all duration-200 flex items-center gap-3 border ${
+                        isSelected
+                          ? 'bg-blue-600/20 border-blue-500/50 text-white shadow-md'
+                          : 'bg-slate-900/40 hover:bg-slate-800/80 border-slate-800/80 hover:border-slate-700 text-slate-300'
+                      } group`}
+                    >
+                      <div className={`p-2 rounded-lg shrink-0 transition-colors ${
+                        isSelected ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800/90 text-slate-400 group-hover:bg-blue-600/20 group-hover:text-blue-400'
+                      }`}>
+                        {cat !== 'All' ? getCategoryIcon(cat) : <BookOpen size={16} />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate font-extrabold text-white text-xs leading-snug">{cat}</p>
+                        <p className="text-[10px] text-slate-500 font-semibold">{count} {count === 1 ? 'Module' : 'Modules'}</p>
+                      </div>
+                      <ChevronRight size={14} className={`transition-transform ${
+                        isSelected ? 'text-blue-400 translate-x-0.5' : 'text-slate-600 group-hover:text-blue-400 group-hover:translate-x-0.5'
+                      }`} />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* ── RIGHT MAIN CONTENT AREA: MODULES GRID (Exact match to Quiz Section!) ── */}
+          <div className="flex-1 min-w-0 space-y-6 w-full">
+            
+            {/* Top Controls Bar: Search & Difficulty Tier Filters */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900/40 border border-slate-800 p-4 rounded-2xl">
+              
+              {/* Search Input */}
+              <div className="relative w-full sm:w-80">
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Search courses or threat topics..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+                />
+              </div>
+
+              {/* Difficulty Tier Filters */}
+              <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto">
+                <span className="text-xs font-bold text-slate-400 flex items-center gap-1 shrink-0">
+                  <Filter size={14} /> Difficulty Tier:
+                </span>
+                {['All', 'Beginner', 'Intermediate', 'Advanced'].map((diff) => (
+                  <button
+                    key={diff}
+                    onClick={() => setSelectedDifficulty(diff)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                      selectedDifficulty === diff
+                        ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                        : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    {diff}
+                  </button>
+                ))}
+              </div>
+
+            </div>
+
+            {/* Active Category Header & Count Sub-Header */}
+            <div className="flex items-center justify-between px-1">
+              <h2 className="text-lg font-extrabold text-white flex items-center gap-2">
+                {getCategoryIcon(selectedCategory)}
+                <span>{selectedCategory === 'All' ? 'All Cybersecurity Categories' : selectedCategory}</span>
+              </h2>
+              <span className="text-xs text-slate-400 font-medium">
+                Showing {filteredLessons.length} {filteredLessons.length === 1 ? 'Learning Module' : 'Learning Modules'}
+              </span>
+            </div>
+
+            {/* Learning Modules Cards Grid */}
+            {filteredLessons.length === 0 ? (
+              <div className="h-full min-h-[350px] border border-slate-800 border-dashed rounded-3xl flex flex-col items-center justify-center text-center p-10 bg-slate-900/20">
+                <div className="p-5 rounded-2xl bg-slate-800/30 border border-slate-700/30 mb-4">
+                  <BookOpen size={36} className="text-slate-600" />
+                </div>
+                <p className="text-base font-bold text-slate-300">No Learning Modules Found</p>
+                <p className="text-xs text-slate-500 mt-1 max-w-xs leading-relaxed">
+                  No training modules match the selected category or search filter. Try selecting a different category from the left sidebar.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {filteredLessons.map((lesson) => (
+                  <Card 
+                    key={lesson.id} 
+                    className={`border bg-slate-900/60 backdrop-blur-xl p-6 flex flex-col justify-between space-y-4 hover:border-blue-500/40 transition-all duration-200 group ${
+                      lesson.completed ? 'border-emerald-500/30' : 'border-slate-800'
+                    }`}
+                  >
+                    <div className="space-y-3">
+                      {/* Top Badges */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 bg-slate-950 text-blue-400 border border-blue-500/20 rounded-md flex items-center gap-1">
+                          {getCategoryIcon(lesson.category)}
+                          {lesson.category}
+                        </span>
+
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-800 text-slate-300 rounded">
+                            {lesson.difficulty}
+                          </span>
+                          {lesson.completed && (
+                            <span className="text-[10px] font-extrabold px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded flex items-center gap-1">
+                              <CheckCircle size={10} /> Done
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Title & Summary */}
+                      <div>
+                        <h3 className="text-base font-extrabold text-white group-hover:text-blue-300 transition-colors leading-snug line-clamp-2">
+                          {lesson.title}
+                        </h3>
+                        <p className="text-xs text-slate-400 mt-2 line-clamp-3 leading-relaxed">
+                          {lesson.summary || "Master threat detection techniques, red flags, and mitigation strategies."}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Footer Action Button */}
+                    <div className="pt-4 border-t border-slate-800/80 flex items-center justify-between gap-4">
+                      <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
+                        <BookOpen size={13} /> Interactive Module
+                      </span>
+
+                      <Button
+                        onClick={() => handleSelectLesson(lesson.id)}
+                        className={`text-xs font-extrabold px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-md ${
+                          lesson.completed
+                            ? 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                            : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/20'
+                        }`}
+                      >
+                        <span>{lesson.completed ? 'Review Briefing' : 'Start Briefing'}</span>
+                        <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+                      </Button>
+                    </div>
+                  </Card>
+                ))}
               </div>
             )}
           </div>
 
-          {/* ── RIGHT PANEL: Lesson Reader ── */}
-          <div className="flex-1 min-w-0">
-            {(filteredLessons.length === 0 || !selectedLesson) ? (
-              <div className="h-full min-h-[480px] border border-slate-800 border-dashed rounded-3xl flex flex-col items-center justify-center text-center p-10 bg-slate-900/20">
-                <div className="p-5 rounded-2xl bg-slate-800/30 border border-slate-700/30 mb-5">
-                  <BookOpen size={40} className="text-slate-600" />
-                </div>
-                {filteredLessons.length === 0 ? (
-                  <>
-                    <p className="text-base font-bold text-slate-300">No Modules Found</p>
-                    <p className="text-xs text-slate-500 mt-2 max-w-xs leading-relaxed">
-                      No cybersecurity modules match the selected category or search query. Try selecting a different category from the sidebar.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-base font-bold text-slate-300">Select a Cybersecurity Module</p>
-                    <p className="text-xs text-slate-500 mt-2 max-w-xs leading-relaxed">
-                      Choose any training course from the curriculum on the left to read content and complete knowledge checks.
-                    </p>
-                  </>
-                )}
-              </div>
-            ) : selectedLesson ? (
-                <Card className="border border-slate-800 bg-slate-900/50 p-6 sm:p-8 space-y-6 shadow-2xl backdrop-blur-xl">
-                  {/* Header */}
-                  <div className="pb-4 border-b border-slate-800 flex justify-between items-start flex-wrap gap-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs px-2.5 py-1 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/20 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                          {getCategoryIcon(selectedLesson.category)}
-                          {selectedLesson.category}
-                        </span>
-                        <span className="text-xs px-2.5 py-1 bg-slate-800 text-slate-300 rounded-lg font-bold">
-                          {selectedLesson.difficulty} Level
-                        </span>
-                      </div>
-                      <h2 className="text-2xl sm:text-3xl font-black text-white mt-3 leading-tight">{selectedLesson.title}</h2>
-                    </div>
-
-                    {selectedLesson.completed && (
-                      <span className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-400 px-3.5 py-2 bg-emerald-500/10 rounded-xl border border-emerald-500/30 shadow-inner">
-                        <CheckCircle size={16} /> Certified Complete
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Render Lesson HTML Content */}
-                  <div 
-                    className="text-slate-300 text-sm leading-relaxed prose prose-invert max-w-none space-y-4"
-                    dangerouslySetInnerHTML={{ __html: selectedLesson.content }}
-                  />
-
-                  {/* ── Interactive Practical Exercise Widgets ── */}
-                  {selectedLesson.category === 'Phishing Attacks' && (
-                    <div className="p-5 rounded-2xl bg-slate-950/80 border border-blue-500/30 space-y-3">
-                      <div className="flex items-center gap-2 text-blue-400 font-bold text-xs">
-                        <Eye size={16} /> INTERACTIVE EXERCISE: Spot The Red Flag
-                      </div>
-                      <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 space-y-2">
-                        <p><strong>From:</strong> security-update@paypa1-verify.com</p>
-                        <p><strong>Subject:</strong> 🚨 Immediate Action Required: Account Suspended in 24 Hours</p>
-                        <p className="text-slate-400">"Dear Customer, we detected unauthorized attempts. Click <span className="text-blue-400 underline cursor-pointer" onClick={() => setEmailFlagged("Domain Spoofing Detected: 'paypa1-verify.com' is an external fake domain!")}>http://paypa1-verify.com/login</span> to verify password."</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button 
-                          onClick={() => setEmailFlagged("Correct! The domain 'paypa1-verify.com' uses typosquatting to impersonate PayPal.")}
-                          className="bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white px-3 py-1.5"
-                        >
-                          Flag Typosquatted Domain
-                        </Button>
-                      </div>
-                      {emailFlagged && (
-                        <p className="text-xs font-bold text-emerald-400 bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20">{emailFlagged}</p>
-                      )}
-                    </div>
-                  )}
-
-                  {selectedLesson.category === 'Password & Authentication Security' && (
-                    <div className="p-5 rounded-2xl bg-slate-950/80 border border-emerald-500/30 space-y-3">
-                      <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs">
-                        <KeyRound size={16} /> INTERACTIVE EXERCISE: Real-Time Password Entropy Tester
-                      </div>
-                      <input
-                        type="text"
-                        placeholder="Type a sample password to test entropy..."
-                        value={testPassword}
-                        onChange={(e) => setTestPassword(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                      />
-                      {testPassword && (
-                        <div className="space-y-1.5">
-                          <div className="flex justify-between text-xs font-bold">
-                            <span className={calculatePasswordScore(testPassword).color}>
-                              {calculatePasswordScore(testPassword).text}
-                            </span>
-                            <span className="text-slate-400">{calculatePasswordScore(testPassword).score}% Score</span>
-                          </div>
-                          <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-                            <div 
-                              className="bg-emerald-500 h-2 transition-all duration-300" 
-                              style={{ width: `${calculatePasswordScore(testPassword).score}%` }} 
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Quiz Check Section */}
-                  {selectedLesson.quiz.id ? (
-                    <div className="pt-6 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="text-xs text-slate-400 flex items-center gap-2">
-                        <HelpCircle size={16} className="text-emerald-400" />
-                        <span>Interactive Knowledge Check • Pass threshold: <strong>70%+</strong></span>
-                      </div>
-                      <Link to={`/quiz/${selectedLesson.quiz.id}`}>
-                        <Button className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold px-6 py-3 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20">
-                          <Play size={16} /> Take Knowledge Quiz
-                        </Button>
-                      </Link>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-500 italic pt-4">No quiz currently configured for this module.</p>
-                  )}
-                </Card>
-            ) : null}
-          </div>
         </div>
       )}
 
@@ -1364,6 +1401,41 @@ export default function EmployeeLessons() {
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </select>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
+              <label className="text-xs font-bold text-slate-300 block">Audience Visibility Scope</label>
+              <div className="flex items-center gap-4">
+                <label className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-all ${
+                  isPublic 
+                    ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-400' 
+                    : 'border-slate-800 bg-slate-900 text-slate-400'
+                }`}>
+                  <input
+                    type="radio"
+                    name="scope"
+                    checked={isPublic}
+                    onChange={() => setIsPublic(true)}
+                    className="hidden"
+                  />
+                  <span>🌐 Public (Visible to ALL employees across all organizations)</span>
+                </label>
+
+                <label className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-all ${
+                  !isPublic 
+                    ? 'border-blue-500/50 bg-blue-500/10 text-blue-400' 
+                    : 'border-slate-800 bg-slate-900 text-slate-400'
+                }`}>
+                  <input
+                    type="radio"
+                    name="scope"
+                    checked={!isPublic}
+                    onChange={() => setIsPublic(false)}
+                    className="hidden"
+                  />
+                  <span>🔒 Private (Visible ONLY to your organization employees)</span>
+                </label>
               </div>
             </div>
 

@@ -57,8 +57,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
-    # AI Phishing Email Generator Configuration
-    AI_PROVIDER: str = "openai"
+    # AI Phishing Email Generator & Chatbot Configuration
+    AI_PROVIDER: str = "gemini"
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.0-flash"
     OPENAI_API_KEY: str = ""
     LLAMA_API_URL: str = "http://localhost:11434/v1"
     LLAMA_API_KEY: str = "llama"

@@ -27,11 +27,14 @@ import AdminUsers from './pages/AdminUsers';
 import AdminHeatmap from './pages/AdminHeatmap';
 import AdminAiGenerator from './pages/AdminAiGenerator';
 import AdminNotifications from './pages/AdminNotifications';
+import AdminLearning from './pages/AdminLearning';
+import AdminQuizzes from './pages/AdminQuizzes';
 
 // ── Employee Pages ────────────────────────────────────────────────────────────
 import EmployeeDashboard from './pages/EmployeeDashboard';
 import EmployeeLessons from './pages/EmployeeLessons';
 import EmployeeQuiz from './pages/EmployeeQuiz';
+import EmployeeQuizzesPage from './pages/EmployeeQuizzesPage';
 import EmployeeCertificates from './pages/EmployeeCertificates';
 import DepartmentPerformance from './pages/DepartmentPerformance';
 import EmployeeProfile from './pages/EmployeeProfile';
@@ -66,7 +69,7 @@ export default function App() {
                 <Route path="/dashboard" element={<EmployeeDashboard />} />
                 <Route path="/lessons" element={<EmployeeLessons />} />
                 <Route path="/quiz/:id" element={<EmployeeQuiz />} />
-                <Route path="/quizzes" element={<EmployeeLessons />} />
+                <Route path="/quizzes" element={<EmployeeQuizzesPage />} />
                 <Route path="/certificates" element={<EmployeeCertificates />} />
                 <Route path="/profile" element={<EmployeeProfile />} />
                 <Route path="/account" element={<EmployeeProfile />} />
@@ -177,24 +180,10 @@ export default function App() {
                   </div>
                 } />
                 <Route path="behavioral-analytics" element={<AdminAnalytics />} />
-                <Route path="adaptive-learning" element={
-                  <div className="p-4">
-                    <h2 className="text-xl font-bold text-white">Adaptive Learning Engine</h2>
-                    <p className="text-sm text-slate-400 mt-2">Automated training assignment rules based on campaign click rates.</p>
-                  </div>
-                } />
-                <Route path="quizzes" element={
-                  <div className="p-4">
-                    <h2 className="text-xl font-bold text-white">Security Quizzes</h2>
-                    <p className="text-sm text-slate-400 mt-2">Manage interactive assessments and passing thresholds.</p>
-                  </div>
-                } />
-                <Route path="learning-progress" element={
-                  <div className="p-4">
-                    <h2 className="text-xl font-bold text-white">Training Progress &amp; Leaderboard</h2>
-                    <p className="text-sm text-slate-400 mt-2">Track completion metrics and organization-wide certificates.</p>
-                  </div>
-                } />
+                <Route path="adaptive-learning" element={<AdminLearning />} />
+                <Route path="learning" element={<AdminLearning />} />
+                <Route path="quizzes" element={<AdminQuizzes />} />
+                <Route path="learning-progress" element={<AdminLearning />} />
                 <Route path="notifications" element={<AdminNotifications />} />
                 <Route path="profile" element={
                   <div className="p-6 max-w-4xl mx-auto space-y-6">

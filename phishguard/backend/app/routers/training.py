@@ -24,6 +24,27 @@ cert_router = APIRouter(tags=["certificates"])
 class QuizSubmissionPayload(BaseModel):
     answers: Optional[List[int]] = None
 
+class LessonCreatePayload(BaseModel):
+    title: str
+    topic: Optional[str] = "general_security"
+    category: Optional[str] = "Phishing Attacks"
+    difficulty: Optional[str] = "Beginner"
+    summary: Optional[str] = ""
+    content: str
+    is_public: bool = True
+    quiz: Optional[List[dict]] = None
+
+class QuizCreatePayload(BaseModel):
+    title: str
+    category: Optional[str] = "Phishing Attacks"
+    difficulty: Optional[str] = "Beginner"
+    summary: Optional[str] = ""
+    time_estimate: Optional[str] = "5 mins"
+    pass_score: Optional[int] = 75
+    questions: List[dict]
+    is_public: bool = True
+    lesson_id: Optional[int] = None
+
 def generate_certificate_pdf(user_name: str, lesson_title: str, dest_path: str):
     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
     
@@ -452,10 +473,23 @@ def ensure_seeded_lessons(db: Session):
 
 def ensure_user_assignments(user_id: int, db: Session):
     ensure_seeded_lessons(db)
-    all_lessons = db.query(Lesson).all()
+    user = db.query(User).filter(User.id == user_id).first()
+    user_org_id = user.organization_id if user else None
+
+    query = db.query(Lesson)
+    if user_org_id:
+        query = query.filter(
+            (Lesson.is_public == True) | (Lesson.organization_id == user_org_id) | (Lesson.organization_id == None)
+        )
+    else:
+        query = query.filter(
+            (Lesson.is_public == True) | (Lesson.organization_id == None)
+        )
+
+    eligible_lessons = query.all()
     assigned_ids = {a.lesson_id for a in db.query(LessonAssignment).filter(LessonAssignment.user_id == user_id).all()}
     
-    for l in all_lessons:
+    for l in eligible_lessons:
         if l.id not in assigned_ids:
             new_assoc = LessonAssignment(
                 user_id=user_id,
@@ -475,6 +509,12 @@ def get_assignments(
     results = []
     for assoc in assignments:
         lesson = assoc.lesson
+        if not lesson:
+            continue
+        # Scope check
+        if not lesson.is_public and lesson.organization_id and lesson.organization_id != current_user.organization_id:
+            continue
+
         quiz = db.query(Quiz).filter(Quiz.lesson_id == lesson.id).first()
         
         results.append({
@@ -492,6 +532,8 @@ def get_assignments(
                 "summary": getattr(lesson, "summary", "") or "",
                 "is_emerging_threat": getattr(lesson, "is_emerging_threat", False),
                 "cve_id": getattr(lesson, "cve_id", None),
+                "is_public": getattr(lesson, "is_public", True),
+                "organization_id": getattr(lesson, "organization_id", None),
                 "quiz": {
                     "id": quiz.id if quiz else None,
                     "questions": quiz.questions if quiz else []
@@ -509,18 +551,19 @@ def get_lessons(
 ):
     ensure_user_assignments(current_user.id, db)
     assignments = db.query(LessonAssignment).filter(LessonAssignment.user_id == current_user.id).all()
-    if not assignments:
-        all_lessons = db.query(Lesson).all()
-        for l in all_lessons:
-            db.add(LessonAssignment(user_id=current_user.id, lesson_id=l.id))
-        db.commit()
-        assignments = db.query(LessonAssignment).filter(LessonAssignment.user_id == current_user.id).all()
 
     results = []
     for assoc in assignments:
         lesson = assoc.lesson
         if not lesson:
             continue
+        
+        # Check public vs private scope
+        is_pub = getattr(lesson, "is_public", True)
+        org_id = getattr(lesson, "organization_id", None)
+        if not is_pub and org_id and org_id != current_user.organization_id:
+            continue
+
         cat = getattr(lesson, "category", "Phishing Attacks") or "Phishing Attacks"
         diff = getattr(lesson, "difficulty", "Beginner") or "Beginner"
 
@@ -538,6 +581,8 @@ def get_lessons(
             "summary": getattr(lesson, "summary", "") or "",
             "is_emerging_threat": getattr(lesson, "is_emerging_threat", False),
             "cve_id": getattr(lesson, "cve_id", None),
+            "is_public": is_pub,
+            "organization_id": org_id,
             "assigned_at": assoc.assigned_at,
             "completed_at": assoc.completed_at,
             "completed": assoc.completed_at is not None
@@ -988,6 +1033,263 @@ def complete_lesson(
         "score": score,
         "passed": passed,
         "suggested_next_difficulty": current_user.suggested_next_difficulty
+    }
+
+@router.post("/lessons")
+def create_lesson(
+    payload: LessonCreatePayload,
+    current_user: User = Depends(require_role(["admin"])),
+    db: Session = Depends(get_db)
+):
+    new_lesson = Lesson(
+        topic=payload.topic or "general_security",
+        title=payload.title,
+        content=payload.content,
+        category=payload.category or "Phishing Attacks",
+        difficulty=payload.difficulty or "Beginner",
+        summary=payload.summary or "",
+        is_public=payload.is_public,
+        organization_id=current_user.organization_id,
+        published_date=datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    )
+    db.add(new_lesson)
+    db.flush()
+
+    if payload.quiz:
+        new_quiz = Quiz(
+            lesson_id=new_lesson.id,
+            title=f"{payload.title} Quiz",
+            category=payload.category or "Phishing Attacks",
+            difficulty=payload.difficulty or "Beginner",
+            summary=f"Knowledge check for {payload.title}",
+            questions=payload.quiz,
+            is_public=payload.is_public,
+            organization_id=current_user.organization_id
+        )
+        db.add(new_quiz)
+
+    db.commit()
+
+    org_users = db.query(User).filter(
+        User.organization_id == current_user.organization_id
+    ).all() if not payload.is_public else db.query(User).all()
+
+    for u in org_users:
+        db.add(LessonAssignment(user_id=u.id, lesson_id=new_lesson.id))
+    db.commit()
+
+    return {"message": "Lesson created successfully", "lesson_id": new_lesson.id}
+
+@router.get("/quizzes")
+def get_quizzes(
+    category: Optional[str] = None,
+    difficulty: Optional[str] = None,
+    current_user: User = Depends(require_role(["admin", "employee"])),
+    db: Session = Depends(get_db)
+):
+    query = db.query(Quiz)
+    if current_user.organization_id:
+        query = query.filter(
+            (Quiz.is_public == True) | (Quiz.organization_id == current_user.organization_id) | (Quiz.organization_id == None)
+        )
+    else:
+        query = query.filter(
+            (Quiz.is_public == True) | (Quiz.organization_id == None)
+        )
+
+    quizzes = query.all()
+    results = []
+    for q in quizzes:
+        cat = q.category or "Phishing Attacks"
+        diff = q.difficulty or "Beginner"
+        if category and category.strip() and category.lower() != "all" and cat.lower() != category.lower():
+            continue
+        if difficulty and difficulty.strip() and difficulty.lower() != "all" and diff.lower() != difficulty.lower():
+            continue
+
+        results.append({
+            "id": q.id,
+            "title": q.title or (q.lesson.title + " Quiz" if q.lesson else "Security Assessment"),
+            "category": cat,
+            "difficulty": diff,
+            "summary": q.summary or "",
+            "time_estimate": q.time_estimate or "5 mins",
+            "pass_score": q.pass_score or 75,
+            "is_public": getattr(q, "is_public", True),
+            "organization_id": getattr(q, "organization_id", None),
+            "questions": q.questions
+        })
+    return results
+
+@router.post("/quizzes")
+def create_quiz(
+    payload: QuizCreatePayload,
+    current_user: User = Depends(require_role(["admin"])),
+    db: Session = Depends(get_db)
+):
+    new_quiz = Quiz(
+        lesson_id=payload.lesson_id,
+        title=payload.title,
+        category=payload.category or "Phishing Attacks",
+        difficulty=payload.difficulty or "Beginner",
+        summary=payload.summary or "",
+        time_estimate=payload.time_estimate or "5 mins",
+        pass_score=payload.pass_score or 75,
+        questions=payload.questions,
+        is_public=payload.is_public,
+        organization_id=current_user.organization_id
+    )
+    db.add(new_quiz)
+    db.commit()
+    return {"message": "Quiz module created successfully", "quiz_id": new_quiz.id}
+
+@router.get("/admin/learning-stats")
+def get_admin_learning_stats(
+    current_user: User = Depends(require_role(["admin"])),
+    db: Session = Depends(get_db)
+):
+    org_id = current_user.organization_id
+
+    # Organization Employees
+    org_users = db.query(User).filter(User.organization_id == org_id).all() if org_id else db.query(User).all()
+    user_ids = [u.id for u in org_users]
+
+    total_employees = len(org_users)
+    
+    # Assignments & Completions
+    assignments = db.query(LessonAssignment).filter(LessonAssignment.user_id.in_(user_ids)).all() if user_ids else []
+    total_assigned = len(assignments)
+    completed_assignments = [a for a in assignments if a.completed_at is not None]
+    total_completed = len(completed_assignments)
+    
+    completion_rate = round((total_completed / total_assigned * 100), 1) if total_assigned > 0 else 0.0
+
+    # Active Learners (users with at least 1 completed lesson)
+    active_user_ids = {a.user_id for a in completed_assignments}
+    active_learners = len(active_user_ids)
+
+    # Detailed Employee Performance List
+    employee_performance = []
+    for u in org_users:
+        u_assigned = [a for a in assignments if a.user_id == u.id]
+        u_completed = [a for a in u_assigned if a.completed_at is not None]
+        u_comp_count = len(u_completed)
+        u_total_count = len(u_assigned)
+        u_pct = round((u_comp_count / u_total_count * 100), 1) if u_total_count > 0 else 0.0
+
+        raw_handle = u.email.split('@')[0]
+        formatted_name = f"{u.first_name or ''} {u.last_name or ''}".strip() or raw_handle.replace('.', ' ').replace('_', ' ').title()
+
+        employee_performance.append({
+            "id": u.id,
+            "name": formatted_name,
+            "email": u.email,
+            "department": u.department.name if u.department else "General",
+            "assigned_count": u_total_count,
+            "completed_count": u_comp_count,
+            "completion_rate": u_pct,
+            "status": "Active Learner" if u_comp_count > 0 else "Pending Start"
+        })
+
+    # Published Organization Lessons
+    org_lessons = db.query(Lesson).filter(
+        (Lesson.organization_id == org_id) | (Lesson.is_public == True)
+    ).all() if org_id else db.query(Lesson).all()
+
+    published_lessons = []
+    for l in org_lessons:
+        published_lessons.append({
+            "id": l.id,
+            "title": l.title,
+            "category": l.category or "Phishing Attacks",
+            "difficulty": l.difficulty or "Beginner",
+            "summary": l.summary or "",
+            "is_public": l.is_public if l.is_public is not None else True,
+            "organization_id": l.organization_id,
+            "published_date": l.published_date or "Recently"
+        })
+
+    return {
+        "organization_name": current_user.organization.name if current_user.organization else "Organization",
+        "total_employees": total_employees,
+        "total_completed": total_completed,
+        "completion_rate": completion_rate,
+        "active_learners": active_learners,
+        "employee_performance": employee_performance,
+        "published_lessons": published_lessons
+    }
+
+@router.get("/admin/quiz-stats")
+def get_admin_quiz_stats(
+    current_user: User = Depends(require_role(["admin"])),
+    db: Session = Depends(get_db)
+):
+    org_id = current_user.organization_id
+
+    # Organization Employees
+    org_users = db.query(User).filter(User.organization_id == org_id).all() if org_id else db.query(User).all()
+    user_ids = [u.id for u in org_users]
+
+    total_employees = len(org_users)
+
+    # Attempts
+    attempts = db.query(QuizAttempt).filter(QuizAttempt.user_id.in_(user_ids)).all() if user_ids else []
+    total_attempts = len(attempts)
+    passed_attempts = [a for a in attempts if a.passed]
+    total_passed = len(passed_attempts)
+
+    avg_pass_rate = round((total_passed / total_attempts * 100), 1) if total_attempts > 0 else 0.0
+    avg_score = round(sum(a.score for a in attempts) / total_attempts, 1) if total_attempts > 0 else 0.0
+
+    # Detailed Employee Quiz Performance List
+    employee_quiz_perf = []
+    for u in org_users:
+        u_attempts = [a for a in attempts if a.user_id == u.id]
+        u_attempt_count = len(u_attempts)
+        u_passed_count = len([a for a in u_attempts if a.passed])
+        u_avg_score = round(sum(a.score for a in u_attempts) / u_attempt_count, 1) if u_attempt_count > 0 else 0.0
+
+        raw_handle = u.email.split('@')[0]
+        formatted_name = f"{u.first_name or ''} {u.last_name or ''}".strip() or raw_handle.replace('.', ' ').replace('_', ' ').title()
+
+        employee_quiz_perf.append({
+            "id": u.id,
+            "name": formatted_name,
+            "email": u.email,
+            "department": u.department.name if u.department else "General",
+            "attempted_count": u_attempt_count,
+            "passed_count": u_passed_count,
+            "avg_score": u_avg_score,
+            "status": "Compliant" if u_avg_score >= 75 else ("In Progress" if u_attempt_count > 0 else "Not Started")
+        })
+
+    # Published Organization Quizzes
+    org_quizzes = db.query(Quiz).filter(
+        (Quiz.organization_id == org_id) | (Quiz.is_public == True)
+    ).all() if org_id else db.query(Quiz).all()
+
+    published_quizzes = []
+    for q in org_quizzes:
+        published_quizzes.append({
+            "id": q.id,
+            "title": q.title or (q.lesson.title + " Quiz" if q.lesson else "Security Quiz"),
+            "category": q.category or "Phishing Attacks",
+            "difficulty": q.difficulty or "Beginner",
+            "summary": q.summary or "",
+            "time_estimate": q.time_estimate or "5 mins",
+            "pass_score": q.pass_score or 75,
+            "is_public": q.is_public if q.is_public is not None else True,
+            "organization_id": q.organization_id
+        })
+
+    return {
+        "organization_name": current_user.organization.name if current_user.organization else "Organization",
+        "total_employees": total_employees,
+        "total_attempts": total_attempts,
+        "avg_pass_rate": avg_pass_rate,
+        "avg_score": avg_score,
+        "employee_quiz_performance": employee_quiz_perf,
+        "published_quizzes": published_quizzes
     }
 
 @router.get("/leaderboard")

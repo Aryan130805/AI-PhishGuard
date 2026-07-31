@@ -64,7 +64,9 @@ jobs:
       # 4. Run Pytest Suite with Coverage
       - name: Run Backend Tests
         env:
-          PYTHONPATH: phishguard/backend
+          PYTHONPATH: .
+          DATABASE_URL_OVERRIDE: ""
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/phishguard
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_HOST: localhost
@@ -113,6 +115,9 @@ jobs:
       # 10. Start Services for Playwright & ZAP baseline scan
       - name: Start Application Servers
         env:
+          PYTHONPATH: .
+          DATABASE_URL_OVERRIDE: ""
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/phishguard
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_HOST: localhost

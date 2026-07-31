@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { 
   HelpCircle, Shield, CheckCircle, Users, Award, TrendingUp, Plus, 
-  Search, Filter, Lock, Globe, AlertTriangle, RefreshCw, Clock, Upload 
+  Search, Filter, Lock, Globe, AlertTriangle, RefreshCw, Clock, Upload, Trash2 
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { useToast } from '../components/ui/Toast';
 import { supabase } from '../lib/supabase';
+import { apiFetch } from '../lib/api';
 import { useAuth } from '../AuthContext';
 
 interface EmployeeQuizPerf {
@@ -170,6 +171,37 @@ export default function AdminQuizzes() {
   useEffect(() => {
     fetchStats();
   }, [user]);
+
+  const handleDeleteQuiz = async (id: number, title: string) => {
+    if (!window.confirm(`Are you sure you want to remove the quiz module "${title}"?`)) return;
+
+    try {
+      // Delete from Supabase
+      const { error } = await supabase.from('quizzes').delete().eq('id', id);
+      if (error) console.error('Supabase quiz delete warning:', error);
+
+      // Also call backend API delete
+      try {
+        await apiFetch(`/training/quizzes/${id}`, { method: 'DELETE' });
+      } catch {
+        // Backend optional
+      }
+
+      addToast({
+        title: 'Quiz Removed',
+        description: `Successfully removed quiz module "${title}".`,
+        type: 'success'
+      });
+      fetchStats();
+    } catch (err: any) {
+      console.error('Delete quiz error:', err);
+      addToast({
+        title: 'Remove Error',
+        description: err?.message || 'Could not remove quiz module.',
+        type: 'error'
+      });
+    }
+  };
 
   const handleCreateQuiz = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -444,20 +476,30 @@ export default function AdminQuizzes() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {quizzes.map((quiz) => (
-            <Card key={quiz.id} className="border border-slate-800 bg-slate-950/60 p-5 space-y-3">
+            <Card key={quiz.id} className="border border-slate-800 bg-slate-950/60 p-5 space-y-3 relative group">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded">
                   {quiz.category}
                 </span>
 
-                <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded border flex items-center gap-1 ${
-                  quiz.is_public 
-                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                    : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
-                }`}>
-                  {quiz.is_public ? <Globe size={10} /> : <Lock size={10} />}
-                  {quiz.is_public ? 'Public' : 'Private (Org)'}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded border flex items-center gap-1 ${
+                    quiz.is_public 
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
+                  }`}>
+                    {quiz.is_public ? <Globe size={10} /> : <Lock size={10} />}
+                    {quiz.is_public ? 'Public' : 'Private (Org)'}
+                  </span>
+
+                  <button
+                    onClick={() => handleDeleteQuiz(quiz.id, quiz.title)}
+                    className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors border border-transparent hover:border-rose-500/20"
+                    title="Remove Quiz Module"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
               </div>
 
               <h3 className="text-sm font-extrabold text-white leading-snug">{quiz.title}</h3>

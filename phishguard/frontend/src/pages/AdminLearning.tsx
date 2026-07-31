@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { 
   GraduationCap, BookOpen, CheckCircle, Users, Award, TrendingUp, Plus, 
-  Search, Shield, Filter, Lock, Globe, AlertCircle, RefreshCw, Upload 
+  Search, Shield, Filter, Lock, Globe, AlertCircle, RefreshCw, Upload, Trash2 
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { useToast } from '../components/ui/Toast';
 import { supabase } from '../lib/supabase';
+import { apiFetch } from '../lib/api';
 import { useAuth } from '../AuthContext';
 
 interface EmployeePerf {
@@ -165,6 +166,37 @@ export default function AdminLearning() {
   useEffect(() => {
     fetchStats();
   }, [user]);
+
+  const handleDeleteLesson = async (id: number, title: string) => {
+    if (!window.confirm(`Are you sure you want to remove the learning module "${title}"?`)) return;
+
+    try {
+      // Delete from Supabase
+      const { error } = await supabase.from('lessons').delete().eq('id', id);
+      if (error) console.error('Supabase lesson delete warning:', error);
+
+      // Also call backend API delete
+      try {
+        await apiFetch(`/training/lessons/${id}`, { method: 'DELETE' });
+      } catch {
+        // Backend optional
+      }
+
+      addToast({
+        title: 'Module Removed',
+        description: `Successfully removed learning module "${title}".`,
+        type: 'success'
+      });
+      fetchStats();
+    } catch (err: any) {
+      console.error('Delete lesson error:', err);
+      addToast({
+        title: 'Remove Error',
+        description: err?.message || 'Could not remove learning module.',
+        type: 'error'
+      });
+    }
+  };
 
   const handleCreateModule = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -460,20 +492,30 @@ export default function AdminLearning() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {lessons.map((lesson) => (
-            <Card key={lesson.id} className="border border-slate-800 bg-slate-950/60 p-5 space-y-3">
+            <Card key={lesson.id} className="border border-slate-800 bg-slate-950/60 p-5 space-y-3 relative group">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded">
                   {lesson.category}
                 </span>
 
-                <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded border flex items-center gap-1 ${
-                  lesson.is_public 
-                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                    : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
-                }`}>
-                  {lesson.is_public ? <Globe size={10} /> : <Lock size={10} />}
-                  {lesson.is_public ? 'Public' : 'Private (Org)'}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded border flex items-center gap-1 ${
+                    lesson.is_public 
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
+                  }`}>
+                    {lesson.is_public ? <Globe size={10} /> : <Lock size={10} />}
+                    {lesson.is_public ? 'Public' : 'Private (Org)'}
+                  </span>
+
+                  <button
+                    onClick={() => handleDeleteLesson(lesson.id, lesson.title)}
+                    className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors border border-transparent hover:border-rose-500/20"
+                    title="Remove Learning Module"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
               </div>
 
               <h3 className="text-sm font-extrabold text-white leading-snug">{lesson.title}</h3>

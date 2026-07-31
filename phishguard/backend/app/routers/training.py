@@ -740,6 +740,32 @@ def create_lesson(
     db.commit()
     return {"message": "Lesson created successfully", "lesson_id": new_lesson.id}
 
+@router.delete("/lessons/{id}")
+def delete_lesson(
+    id: int,
+    current_user: User = Depends(require_role(["admin"])),
+    db: Session = Depends(get_db)
+):
+    lesson = db.query(Lesson).filter(Lesson.id == id).first()
+    if not lesson:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
+    db.delete(lesson)
+    db.commit()
+    return {"message": "Lesson deleted successfully"}
+
+@router.delete("/quizzes/{id}")
+def delete_quiz(
+    id: int,
+    current_user: User = Depends(require_role(["admin"])),
+    db: Session = Depends(get_db)
+):
+    quiz = db.query(Quiz).filter(Quiz.id == id).first()
+    if not quiz:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quiz not found")
+    db.delete(quiz)
+    db.commit()
+    return {"message": "Quiz deleted successfully"}
+
 @router.get("/lessons/{id}")
 def get_lesson(
     id: int,

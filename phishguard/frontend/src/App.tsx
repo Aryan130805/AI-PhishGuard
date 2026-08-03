@@ -29,6 +29,7 @@ import AdminAiGenerator from './pages/AdminAiGenerator';
 import AdminNotifications from './pages/AdminNotifications';
 import AdminLearning from './pages/AdminLearning';
 import AdminQuizzes from './pages/AdminQuizzes';
+import AdminProgress from './pages/AdminProgress';
 
 // ── Employee Pages ────────────────────────────────────────────────────────────
 import EmployeeDashboard from './pages/EmployeeDashboard';
@@ -39,6 +40,7 @@ import EmployeeCertificates from './pages/EmployeeCertificates';
 import DepartmentPerformance from './pages/DepartmentPerformance';
 import EmployeeProfile from './pages/EmployeeProfile';
 import EmployeeNotifications from './pages/EmployeeNotifications';
+import EmployeeSecurityGroups from './pages/EmployeeSecurityGroups';
 import SimulatedLanding from './pages/SimulatedLanding';
 
 export default function App() {
@@ -85,12 +87,7 @@ export default function App() {
                 <Route path="/ai-generator" element={<AdminAiGenerator />} />
                 <Route path="/employees" element={<AdminUsers />} />
                 <Route path="/departments" element={<DepartmentPerformance />} />
-                <Route path="/groups" element={
-                  <div className="p-4">
-                    <h2 className="text-xl font-bold text-white">Employee Security Groups</h2>
-                    <p className="text-sm text-slate-400 mt-2">Group assignments and security role tiers.</p>
-                  </div>
-                } />
+                <Route path="/groups" element={<EmployeeSecurityGroups />} />
                 <Route path="/ai-email" element={<AdminAiGenerator />} />
                 <Route path="/ai-coach" element={
                   <div className="p-4">
@@ -159,12 +156,7 @@ export default function App() {
                 <Route path="users" element={<AdminUsers />} />
                 <Route path="employees" element={<AdminUsers />} />
                 <Route path="departments" element={<DepartmentPerformance />} />
-                <Route path="groups" element={
-                  <div className="p-4">
-                    <h2 className="text-xl font-bold text-white">Employee Groups</h2>
-                    <p className="text-sm text-slate-400 mt-2">Segment target groups for simulated campaigns.</p>
-                  </div>
-                } />
+                <Route path="groups" element={<EmployeeSecurityGroups />} />
                 <Route path="heatmap" element={<AdminHeatmap />} />
                 <Route path="ai-generator" element={<AdminAiGenerator />} />
                 <Route path="ai-coach" element={
@@ -183,7 +175,8 @@ export default function App() {
                 <Route path="adaptive-learning" element={<AdminLearning />} />
                 <Route path="learning" element={<AdminLearning />} />
                 <Route path="quizzes" element={<AdminQuizzes />} />
-                <Route path="learning-progress" element={<AdminLearning />} />
+                <Route path="learning-progress" element={<AdminProgress />} />
+                <Route path="progress" element={<AdminProgress />} />
                 <Route path="notifications" element={<AdminNotifications />} />
                 <Route path="profile" element={
                   <div className="p-6 max-w-4xl mx-auto space-y-6">

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   HelpCircle, CheckCircle, AlertTriangle, RefreshCw, Award, ChevronRight, 
   Search, Shield, Zap, BookOpen, Clock, Lock, Sparkles, Filter, Check, ArrowRight,
-  KeyRound, UserCheck, Wifi, Cloud, Bot, Smartphone, Building2, ArrowLeft, Plus
+  KeyRound, UserCheck, Wifi, Cloud, Bot, Smartphone, Building2, ArrowLeft, Plus, Flame
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card } from '../components/ui/Card';
@@ -1144,6 +1144,14 @@ export default function EmployeeQuizzesPage() {
 
   // User Completion History Tracking
   const [completedModuleIds, setCompletedModuleIds] = useState<number[]>([101, 301, 501]);
+  const [quizProfile, setQuizProfile] = useState<{
+    knowledge_level: string;
+    streak_days: number;
+    completed_count: number;
+    total_assigned: number;
+    completion_percentage: number;
+    suggested_next_difficulty: string;
+  } | null>(null);
 
   const fetchQuizzes = async () => {
     try {
@@ -1156,8 +1164,21 @@ export default function EmployeeQuizzesPage() {
     }
   };
 
+  const fetchQuizProfile = async () => {
+    try {
+      const res = await apiFetch('/training/adaptive-profile').catch(() => null);
+      if (res && res.ok) {
+        const data = await res.json();
+        setQuizProfile(data);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     fetchQuizzes();
+    fetchQuizProfile();
   }, []);
 
   const handleCreateQuiz = async (e: React.FormEvent) => {
@@ -1536,37 +1557,62 @@ export default function EmployeeQuizzesPage() {
           </p>
         </div>
 
-        {/* Global Progress Cards & Admin Create Button */}
-        <div className="flex items-center gap-3 shrink-0 flex-wrap">
-          {isAdmin && (
+        {/* Admin Create Button */}
+        {isAdmin && (
+          <div className="flex items-center gap-3 shrink-0">
             <Button
               onClick={() => setShowCreateModal(true)}
               className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-4 py-3 rounded-2xl flex items-center gap-2 shadow-lg shadow-emerald-600/20"
             >
               <Plus size={16} /> Create Quiz Module
             </Button>
-          )}
-
-          <div className="px-4 py-3 bg-slate-900 border border-slate-800 rounded-2xl flex items-center gap-3">
-            <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20">
-              <Award size={20} />
-            </div>
-            <div>
-              <div className="text-lg font-black text-white">{completedModuleIds.length} / {allModules.length}</div>
-              <div className="text-[10px] text-slate-400 font-medium">Modules Mastered</div>
-            </div>
           </div>
+        )}
+      </div>
 
-          <div className="px-4 py-3 bg-slate-900 border border-slate-800 rounded-2xl flex items-center gap-3">
-            <div className="p-2 bg-blue-500/10 text-blue-400 rounded-xl border border-blue-500/20">
-              <Shield size={20} />
-            </div>
-            <div>
-              <div className="text-lg font-black text-white">75% Target</div>
-              <div className="text-[10px] text-slate-400 font-medium">Pass Threshold</div>
-            </div>
+      {/* ── Security Quiz Center Dashboard Stat Cards Bar ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="border border-slate-800 bg-slate-900/40 p-4 flex items-center gap-4 backdrop-blur-md">
+          <div className="p-3 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20">
+            <Award size={24} />
           </div>
-        </div>
+          <div>
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Quiz Accuracy Rate</p>
+            <p className="text-lg font-black text-white mt-0.5">88% Avg Accuracy</p>
+          </div>
+        </Card>
+
+        <Card className="border border-slate-800 bg-slate-900/40 p-4 flex items-center gap-4 backdrop-blur-md">
+          <div className="p-3 bg-amber-500/10 text-amber-400 rounded-xl border border-amber-500/20">
+            <Flame size={24} />
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Quiz Mastery Streak</p>
+            <p className="text-lg font-black text-white mt-0.5">{completedModuleIds.length} Quizzes Passed 🔥</p>
+          </div>
+        </Card>
+
+        <Card className="border border-slate-800 bg-slate-900/40 p-4 flex items-center gap-4 backdrop-blur-md">
+          <div className="p-3 bg-blue-500/10 text-blue-400 rounded-xl border border-blue-500/20">
+            <CheckCircle size={24} />
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Completed Assessments</p>
+            <p className="text-lg font-black text-white mt-0.5">
+              {completedModuleIds.length} / {allModules.length} ({Math.round((completedModuleIds.length / (allModules.length || 1)) * 100)}%)
+            </p>
+          </div>
+        </Card>
+
+        <Card className="border border-slate-800 bg-slate-900/40 p-4 flex items-center gap-4 backdrop-blur-md">
+          <div className="p-3 bg-purple-500/10 text-purple-400 rounded-xl border border-purple-500/20">
+            <Shield size={24} />
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Required Pass Threshold</p>
+            <p className="text-lg font-black text-white mt-0.5">75% Passing Standard</p>
+          </div>
+        </Card>
       </div>
 
       {/* ── Admin Create Quiz Modal ── */}

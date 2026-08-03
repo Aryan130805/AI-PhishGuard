@@ -680,9 +680,6 @@ export default function EmployeeLessons() {
             category: resolveCategory(d)
           }));
           setLessons(formattedData);
-          if (!selectedLesson || !formattedData.some((d: any) => d.id === selectedLesson.id)) {
-            handleSelectLesson(formattedData[0].id, formattedData[0]);
-          }
           setIsLoading(false);
           return;
         }
@@ -710,28 +707,6 @@ export default function EmployeeLessons() {
         }));
 
         setLessons(formatted);
-        const first = formatted[0];
-        const detailed = supaLessons.find((sl: any) => sl.id === first.id);
-        setSelectedLesson({
-          id: first.id,
-          topic: first.topic,
-          title: first.title,
-          category: first.category,
-          difficulty: first.difficulty,
-          summary: first.summary,
-          content: detailed?.content || '<p>Security awareness training module content.</p>',
-          completed: false,
-          quiz: {
-            id: first.id,
-            questions: detailed?.quiz || [
-              {
-                question: `What is the key security control for ${first.title}?`,
-                options: ["Verify out-of-band and report suspicious activity", "Ignore alerts", "Share passwords", "Disable antivirus"],
-                correct_index: 0
-              }
-            ]
-          }
-        });
         setIsLoading(false);
         return;
       }
@@ -741,20 +716,6 @@ export default function EmployeeLessons() {
 
     // 3. Built-in Fallback Curriculum (Guarantees master list for ALL categories!)
     setLessons(FALLBACK_LESSONS);
-    if (FALLBACK_LESSONS.length > 0) {
-      const first = FALLBACK_LESSONS[0];
-      setSelectedLesson({
-        id: first.id,
-        topic: first.topic,
-        title: first.title,
-        category: first.category,
-        difficulty: first.difficulty,
-        summary: first.summary,
-        content: first.content,
-        completed: first.completed,
-        quiz: first.quiz
-      });
-    }
     setIsLoading(false);
   };
 
@@ -966,7 +927,9 @@ export default function EmployeeLessons() {
             </div>
             <div>
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Completed Modules</p>
-              <p className="text-lg font-black text-white">{adaptiveProfile.completed_count} / {adaptiveProfile.total_assigned} ({adaptiveProfile.completion_percentage}%)</p>
+              <p className="text-lg font-black text-white">
+                {lessons.filter(l => l.completed).length || adaptiveProfile.completed_count} / {lessons.length || adaptiveProfile.total_assigned} ({Math.round(((lessons.filter(l => l.completed).length || adaptiveProfile.completed_count) / (lessons.length || adaptiveProfile.total_assigned || 1)) * 100)}%)
+              </p>
             </div>
           </Card>
 
@@ -976,7 +939,7 @@ export default function EmployeeLessons() {
             </div>
             <div>
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Target Level Tier</p>
-              <p className="text-lg font-black text-white capitalize">{adaptiveProfile.suggested_next_difficulty} Tier</p>
+              <p className="text-lg font-black text-white capitalize">{adaptiveProfile.suggested_next_difficulty || 'Intermediate'} Tier</p>
             </div>
           </Card>
         </div>

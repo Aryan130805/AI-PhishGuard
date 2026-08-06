@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Building2, Users, UserPlus, UserMinus, ShieldCheck, ShieldAlert,
   Search, Plus, X, Loader2, ChevronDown, ChevronUp, RefreshCw,
-  TrendingUp, Mail, AlertTriangle, CheckCircle2, ArrowRight
+  TrendingUp, Mail, AlertTriangle, CheckCircle2, ArrowRight, Trash2,
+  Clock, LogOut, Inbox, Check
 } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
+import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
 import { useAuth } from '../AuthContext';
-import { supabase } from '../lib/supabase';
 import { apiFetch } from '../lib/api';
 
 export interface DepartmentMember {
@@ -30,7 +31,19 @@ export interface DepartmentData {
   members: DepartmentMember[];
 }
 
-// Initial demo departments seed data with full workforce distribution
+export interface DepartmentRequestItem {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  currentDepartmentName: string;
+  requestedDepartmentId: string;
+  requestedDepartmentName: string;
+  requestType: 'join' | 'switch';
+  requestedAt: string;
+  status: 'pending' | 'approved' | 'rejected';
+}
+
 const INITIAL_DEPARTMENTS: DepartmentData[] = [
   {
     id: 1,
@@ -112,15 +125,22 @@ const INITIAL_DEPARTMENTS: DepartmentData[] = [
 ];
 
 export default function DepartmentPerformance() {
-  const { user } = useAuth();
+  const { user, refreshProfile } = useAuth();
   const { addToast } = useToast();
+  const location = useLocation();
+
+  const isAdmin = !!(user?.role === 'admin' || user?.is_admin || location.pathname.startsWith('/admin'));
 
   const [departments, setDepartments] = useState<DepartmentData[]>(INITIAL_DEPARTMENTS);
+  const [deptRequests, setDeptRequests] = useState<DepartmentRequestItem[]>([]);
+  const [myRequests, setMyRequests] = useState<DepartmentRequestItem[]>([]);
+
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [expandedDeptId, setExpandedDeptId] = useState<string | number | null>(1);
+  const [activeTab, setActiveTab] = useState<'departments' | 'requests'>('departments');
 
-  // Add Employee Modal State
+  // Add Employee Modal State (Admin Only)
   const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState<boolean>(false);
   const [targetDeptId, setTargetDeptId] = useState<string | number | null>(null);
   const [newMemberName, setNewMemberName] = useState<string>('');
@@ -128,65 +148,211 @@ export default function DepartmentPerformance() {
   const [newMemberRole, setNewMemberRole] = useState<string>('Specialist');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // ── Load Departments from Supabase / Local API ──────────────────────────────
+  // Create Department Modal State (Admin Only)
+  const [isCreateDeptModalOpen, setIsCreateDeptModalOpen] = useState<boolean>(false);
+  const [newDeptName, setNewDeptName] = useState<string>('');
+  const [newDeptDesc, setNewDeptDesc] = useState<string>('');
+
   const loadDepartments = async () => {
     setIsLoading(true);
     try {
-      // 1. Query Supabase users and departments
-      const { data: supaUsers, error } = await supabase
-        .from('users')
-        .select(`
-          id,
-          first_name,
-          last_name,
-          email,
-          departments ( id, name )
-        `);
-
-      if (!error && supaUsers && supaUsers.length > 0) {
-        // Group employees by department name
-        const deptMap: Record<string, DepartmentMember[]> = {};
-        
-        supaUsers.forEach((u: any) => {
-          const deptName = u.departments?.name || 'Engineering';
-          if (!deptMap[deptName]) deptMap[deptName] = [];
-          deptMap[deptName].push({
-            id: u.id,
-            first_name: u.first_name || u.email.split('@')[0],
-            last_name: u.last_name || 'Member',
-            email: u.email,
-            role_name: 'Employee',
-            risk_score: Math.floor(Math.random() * 25) + 75
-          });
-        });
-
-        // Merge fetched counts with departments array
-        setDepartments(prevDepts => {
-          return prevDepts.map(d => {
-            const fetchedMembers = deptMap[d.name];
-            if (fetchedMembers && fetchedMembers.length > 0) {
-              return {
-                ...d,
-                employee_count: Math.max(d.employee_count, fetchedMembers.length),
-                members: [...fetchedMembers, ...d.members.filter(m => !fetchedMembers.some(fm => fm.email === m.email))]
-              };
-            }
-            return d;
-          });
-        });
+      const res = await apiFetch('/departments').catch(() => null);
+      if (res && res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setDepartments(data);
+        }
       }
-    } catch (err) {
-      console.warn('Error loading department data:', err);
+    } catch {
+      // ignore
     } finally {
       setIsLoading(false);
     }
   };
 
+  const fetchDeptRequests = async () => {
+    if (!isAdmin) return;
+    try {
+      const res = await apiFetch('/departments/requests').catch(() => null);
+      if (res && res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setDeptRequests(data);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const fetchMyRequests = async () => {
+    try {
+      const res = await apiFetch('/departments/my-requests').catch(() => null);
+      if (res && res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setMyRequests(data);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     loadDepartments();
-  }, []);
+    if (isAdmin) {
+      fetchDeptRequests();
+    } else {
+      fetchMyRequests();
+    }
+  }, [isAdmin]);
 
-  // ── Add Employee to Department (Admin Action) ───────────────────────────────
+  // ── Employee Actions ───────────────────────────────────────────────────────
+
+  const handleLeaveDept = async () => {
+    try {
+      const res = await apiFetch('/departments/leave', { method: 'POST' });
+      if (res.ok) {
+        addToast({
+          title: 'Left Department 🚪',
+          description: 'You have left your department. You can now request to join another department below.',
+          type: 'info'
+        });
+        await refreshProfile();
+        await loadDepartments();
+        await fetchMyRequests();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        addToast({ title: 'Error', description: data.detail || 'Could not leave department.', type: 'error' });
+      }
+    } catch {
+      addToast({ title: 'Error', description: 'Failed to communicate with server.', type: 'error' });
+    }
+  };
+
+  const handleRequestJoinOrSwitch = async (dept: DepartmentData) => {
+    try {
+      const res = await apiFetch(`/departments/${dept.id}/join-request`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        addToast({
+          title: 'Request Submitted! 📩',
+          description: `Submitted request to join "${dept.name}". Stored in database awaiting admin approval.`,
+          type: 'success'
+        });
+        await fetchMyRequests();
+      } else {
+        addToast({ title: 'Request Failed', description: data.detail || 'Could not submit request.', type: 'error' });
+      }
+    } catch {
+      addToast({ title: 'Error', description: 'Failed to communicate with server.', type: 'error' });
+    }
+  };
+
+  // ── Admin Actions ──────────────────────────────────────────────────────────
+
+  const handleApproveDeptRequest = async (req: DepartmentRequestItem) => {
+    try {
+      const res = await apiFetch(`/departments/requests/${req.id}/approve`, { method: 'POST' });
+      if (res.ok) {
+        addToast({
+          title: 'Request Approved! ✅',
+          description: `Approved ${req.userName}'s request into "${req.requestedDepartmentName}". Details moved to department database.`,
+          type: 'success'
+        });
+        await fetchDeptRequests();
+        await loadDepartments();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        addToast({ title: 'Approval Failed', description: data.detail || 'Could not approve request.', type: 'error' });
+      }
+    } catch {
+      addToast({ title: 'Error', description: 'Failed to communicate with server.', type: 'error' });
+    }
+  };
+
+  const handleRejectDeptRequest = async (req: DepartmentRequestItem) => {
+    try {
+      const res = await apiFetch(`/departments/requests/${req.id}/reject`, { method: 'POST' });
+      if (res.ok) {
+        addToast({
+          title: 'Request Rejected ❌',
+          description: `Rejected ${req.userName}'s department request and deleted from database.`,
+          type: 'info'
+        });
+        await fetchDeptRequests();
+        await loadDepartments();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        addToast({ title: 'Rejection Failed', description: data.detail || 'Could not reject request.', type: 'error' });
+      }
+    } catch {
+      addToast({ title: 'Error', description: 'Failed to communicate with server.', type: 'error' });
+    }
+  };
+
+  const handleCreateDepartment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDeptName.trim()) {
+      addToast({ title: 'Missing Name', description: 'Please provide department name.', type: 'error' });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const res = await apiFetch('/departments', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: newDeptName.trim(),
+          description: newDeptDesc.trim()
+        })
+      });
+
+      if (res.ok) {
+        addToast({
+          title: 'Department Created! 🏢',
+          description: `Added "${newDeptName}" department to database.`,
+          type: 'success'
+        });
+        setNewDeptName('');
+        setNewDeptDesc('');
+        setIsCreateDeptModalOpen(false);
+        await loadDepartments();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        addToast({ title: 'Creation Failed', description: data.detail || 'Could not create department.', type: 'error' });
+      }
+    } catch {
+      addToast({ title: 'Error', description: 'Failed to communicate with server.', type: 'error' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteDepartment = async (deptId: string | number, deptName: string) => {
+    if (!window.confirm(`Are you sure you want to delete department "${deptName}"? This will delete department data from database and unassign employees.`)) {
+      return;
+    }
+
+    try {
+      const res = await apiFetch(`/departments/${deptId}`, { method: 'DELETE' });
+      if (res.ok) {
+        addToast({
+          title: 'Department Deleted 🗑️',
+          description: `Deleted department "${deptName}" from database. Unassigned employees will be prompted to select a new department.`,
+          type: 'info'
+        });
+        await loadDepartments();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        addToast({ title: 'Error', description: data.detail || 'Could not delete department.', type: 'error' });
+      }
+    } catch {
+      addToast({ title: 'Error', description: 'Failed to communicate with server.', type: 'error' });
+    }
+  };
+
   const handleAddMemberToDept = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMemberName.trim() || !newMemberEmail.trim() || !targetDeptId) {
@@ -196,73 +362,55 @@ export default function DepartmentPerformance() {
 
     setIsSubmitting(true);
     try {
-      const nameParts = newMemberName.trim().split(' ');
-      const firstName = nameParts[0];
-      const lastName = nameParts.slice(1).join(' ') || 'Member';
-
-      const newMember: DepartmentMember = {
-        id: Date.now(),
-        first_name: firstName,
-        last_name: lastName,
-        email: newMemberEmail.trim(),
-        role_name: newMemberRole.trim() || 'Employee',
-        risk_score: 92
-      };
-
-      setDepartments(prev =>
-        prev.map(dept => {
-          if (dept.id === targetDeptId) {
-            return {
-              ...dept,
-              employee_count: dept.employee_count + 1,
-              members: [newMember, ...dept.members]
-            };
-          }
-          return dept;
+      const res = await apiFetch(`/departments/${targetDeptId}/members`, {
+        method: 'POST',
+        body: JSON.stringify({
+          name: newMemberName.trim(),
+          email: newMemberEmail.trim(),
+          role_name: newMemberRole.trim()
         })
-      );
-
-      const targetDeptName = departments.find(d => d.id === targetDeptId)?.name;
-
-      addToast({
-        title: 'Employee Assigned! 🎉',
-        description: `${firstName} ${lastName} (${newMemberEmail}) added to ${targetDeptName}.`,
-        type: 'success'
       });
 
-      // Reset modal fields
-      setNewMemberName('');
-      setNewMemberEmail('');
-      setIsAddMemberModalOpen(false);
+      if (res.ok) {
+        const targetDeptName = departments.find(d => String(d.id) === String(targetDeptId))?.name;
+        addToast({
+          title: 'Employee Assigned! 🎉',
+          description: `Assigned ${newMemberEmail} to ${targetDeptName} in database.`,
+          type: 'success'
+        });
+        setNewMemberName('');
+        setNewMemberEmail('');
+        setIsAddMemberModalOpen(false);
+        await loadDepartments();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        addToast({ title: 'Assignment Failed', description: data.detail || 'Could not add employee.', type: 'error' });
+      }
     } catch {
-      addToast({ title: 'Assignment Failed', description: 'Could not add employee to department.', type: 'error' });
+      addToast({ title: 'Error', description: 'Failed to communicate with server.', type: 'error' });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // ── Remove Employee from Department (Admin Action) ─────────────────────────
-  const handleRemoveMemberFromDept = (deptId: string | number, member: DepartmentMember) => {
-    setDepartments(prev =>
-      prev.map(dept => {
-        if (dept.id === deptId) {
-          const updatedMembers = dept.members.filter(m => m.id !== member.id && m.email !== member.email);
-          return {
-            ...dept,
-            employee_count: Math.max(0, dept.employee_count - 1),
-            members: updatedMembers
-          };
-        }
-        return dept;
-      })
-    );
-
-    const deptName = departments.find(d => d.id === deptId)?.name;
-    addToast({
-      title: 'Employee Removed',
-      description: `${member.first_name} ${member.last_name} removed from ${deptName}.`,
-      type: 'info'
-    });
+  const handleRemoveMemberFromDept = async (deptId: string | number, member: DepartmentMember) => {
+    try {
+      const res = await apiFetch(`/departments/${deptId}/members/${member.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        const deptName = departments.find(d => String(d.id) === String(deptId))?.name;
+        addToast({
+          title: 'Employee Removed',
+          description: `Removed ${member.first_name} ${member.last_name} from ${deptName} in database.`,
+          type: 'info'
+        });
+        await loadDepartments();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        addToast({ title: 'Error', description: data.detail || 'Could not remove member.', type: 'error' });
+      }
+    } catch {
+      addToast({ title: 'Error', description: 'Failed to communicate with server.', type: 'error' });
+    }
   };
 
   // ── Overall Summary Metrics ────────────────────────────────────────────────
@@ -300,8 +448,19 @@ export default function DepartmentPerformance() {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Add Department button ONLY shown for Admin */}
+          {isAdmin && (
+            <button
+              onClick={() => setIsCreateDeptModalOpen(true)}
+              className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-500/25 transition-all flex items-center gap-2"
+            >
+              <Plus size={16} />
+              <span>Add Department</span>
+            </button>
+          )}
+
           <button
-            onClick={loadDepartments}
+            onClick={() => { loadDepartments(); if (isAdmin) fetchDeptRequests(); else fetchMyRequests(); }}
             disabled={isLoading}
             className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition-all backdrop-blur-md"
             title="Refresh Departments"
@@ -311,230 +470,410 @@ export default function DepartmentPerformance() {
         </div>
       </div>
 
-      {/* Summary KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="border border-slate-800 bg-slate-900/60 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Departments</p>
-              <h3 className="text-2xl font-bold text-white mt-1">{departments.length}</h3>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center border border-blue-500/20">
+      {/* Employee Assigned Department Banner (Shown for Employees with an active department) */}
+      {!isAdmin && user?.department_name && (
+        <Card className="border border-emerald-500/30 bg-emerald-950/20 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
               <Building2 size={20} />
             </div>
-          </div>
-          <p className="text-xs text-slate-500 mt-2">Active organizational units</p>
-        </Card>
-
-        <Card className="border border-slate-800 bg-slate-900/60 p-5">
-          <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Employees</p>
-              <h3 className="text-2xl font-bold text-emerald-400 mt-1">{totalEmployeesCount}</h3>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20">
-              <Users size={20} />
+              <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Your Assigned Department</p>
+              <h3 className="text-lg font-bold text-white">{user.department_name}</h3>
             </div>
           </div>
-          <p className="text-xs text-emerald-400/80 mt-2">Active assigned workforce</p>
+          <button
+            onClick={handleLeaveDept}
+            className="px-4 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold transition-all flex items-center justify-center gap-2 self-start sm:self-center shadow-lg shadow-rose-500/10"
+          >
+            <LogOut size={14} />
+            <span>Leave Department</span>
+          </button>
         </Card>
+      )}
 
-        <Card className="border border-slate-800 bg-slate-900/60 p-5">
+      {/* Admin Tab Navigation */}
+      {isAdmin && (
+        <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+          <button
+            onClick={() => setActiveTab('departments')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+              activeTab === 'departments'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
+                : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Building2 size={14} />
+            <span>Departments Overview</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('requests')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+              activeTab === 'requests'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
+                : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Inbox size={14} />
+            <span>Join &amp; Switch Requests</span>
+            {deptRequests.length > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-black border border-amber-500/30">
+                {deptRequests.length}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* ADMIN REQUESTS TAB */}
+      {isAdmin && activeTab === 'requests' ? (
+        <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Avg Security Score</p>
-              <h3 className="text-2xl font-bold text-blue-400 mt-1">{avgRiskScore} / 100</h3>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
-              <ShieldCheck size={20} />
-            </div>
-          </div>
-          <p className="text-xs text-slate-500 mt-2">Org security health average</p>
-        </Card>
-
-        <Card className="border border-slate-800 bg-slate-900/60 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">High Risk Units</p>
-              <h3 className="text-2xl font-bold text-rose-400 mt-1">
-                {departments.filter(d => d.risk_score < 70).length}
-              </h3>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center border border-rose-500/20">
-              <ShieldAlert size={20} />
-            </div>
-          </div>
-          <p className="text-xs text-rose-400/80 mt-2">Score below 70% threshold</p>
-        </Card>
-      </div>
-
-      {/* Search Input Toolbar */}
-      <Card className="border border-slate-800 bg-slate-900/50 p-4">
-        <div className="relative w-full sm:w-96">
-          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search by department name, role, or employee..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-950/80 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 transition-colors"
-          />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
-              <X size={14} />
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <Inbox size={18} className="text-blue-400" />
+              Pending Department Requests ({deptRequests.length})
+            </h3>
+            <button
+              onClick={fetchDeptRequests}
+              className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-xs"
+            >
+              <RefreshCw size={14} />
             </button>
+          </div>
+
+          {deptRequests.length === 0 ? (
+            <Card className="p-8 text-center border border-slate-800 bg-slate-900/40">
+              <CheckCircle2 size={32} className="mx-auto text-emerald-400 mb-2" />
+              <p className="text-sm font-bold text-white">No Pending Requests</p>
+              <p className="text-xs text-slate-400 mt-1">All employee department requests have been processed.</p>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 gap-3">
+              {deptRequests.map((req) => (
+                <Card key={req.id} className="p-5 border border-slate-800 bg-slate-900/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="p-3 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 shrink-0">
+                      <Users size={20} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-bold text-white">{req.userName}</span>
+                        <span className="text-xs text-slate-400">({req.userEmail})</span>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                          {req.requestType} Request
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-slate-400 mt-1">
+                        <span>Current: <strong className="text-slate-300">{req.currentDepartmentName}</strong></span>
+                        <ArrowRight size={12} className="text-slate-500" />
+                        <span>Requested: <strong className="text-blue-400">{req.requestedDepartmentName}</strong></span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-1">Requested {req.requestedAt}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => handleApproveDeptRequest(req)}
+                      className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
+                    >
+                      <Check size={14} />
+                      <span>Approve &amp; Move</span>
+                    </button>
+                    <button
+                      onClick={() => handleRejectDeptRequest(req)}
+                      className="px-3.5 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 font-bold text-xs transition-all flex items-center gap-1.5"
+                    >
+                      <X size={14} />
+                      <span>Reject &amp; Delete</span>
+                    </button>
+                  </div>
+                </Card>
+              ))}
+            </div>
           )}
         </div>
-      </Card>
-
-      {/* Departments Roster List */}
-      <div className="space-y-4">
-        {filteredDepartments.map((dept) => {
-          const isExpanded = expandedDeptId === dept.id;
-          const isHighRisk = dept.risk_score < 70;
-          const isMediumRisk = dept.risk_score >= 70 && dept.risk_score < 88;
-
-          return (
-            <Card key={dept.id} className="border border-slate-800 bg-slate-900/40 overflow-hidden transition-all">
-              
-              {/* Department Overview Banner */}
-              <div className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/60 bg-slate-950/40">
-                <div className="flex items-start gap-4">
-                  <div className={`p-3 rounded-2xl shrink-0 border ${
-                    isHighRisk 
-                      ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' 
-                      : isMediumRisk 
-                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' 
-                      : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                  }`}>
-                    <Building2 size={24} />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <h3 className="text-lg font-bold text-white">{dept.name}</h3>
-                      <span className="px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs font-extrabold flex items-center gap-1.5">
-                        <Users size={12} />
-                        {dept.employee_count} Employees
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-1 max-w-xl">{dept.description}</p>
-                  </div>
+      ) : (
+        /* DEPARTMENTS OVERVIEW */
+        <>
+          {/* Summary KPI Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="border border-slate-800 bg-slate-900/60 p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Departments</p>
+                  <h3 className="text-2xl font-bold text-white mt-1">{departments.length}</h3>
                 </div>
-
-                {/* Performance Metrics & Admin Controls */}
-                <div className="flex items-center gap-4 self-end md:self-center flex-wrap">
-                  
-                  {/* Security Score Badge */}
-                  <div className="text-right px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800">
-                    <span className="text-[10px] text-slate-500 block uppercase font-bold">Security Score</span>
-                    <span className={`text-base font-black ${
-                      isHighRisk ? 'text-rose-400' : isMediumRisk ? 'text-amber-400' : 'text-emerald-400'
-                    }`}>
-                      {dept.risk_score} / 100
-                    </span>
-                  </div>
-
-                  {/* Add Employee to Department Button (Admin Only) */}
-                  {user?.is_admin && (
-                    <button
-                      onClick={() => {
-                        setTargetDeptId(dept.id);
-                        setIsAddMemberModalOpen(true);
-                      }}
-                      className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs shadow-lg shadow-blue-500/20 transition-all inline-flex items-center gap-1.5"
-                    >
-                      <UserPlus size={14} />
-                      <span>Add Employee</span>
-                    </button>
-                  )}
-
-                  {/* Expand / Collapse Roster Toggle */}
-                  <button
-                    onClick={() => setExpandedDeptId(isExpanded ? null : dept.id)}
-                    className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all inline-flex items-center gap-1 text-xs font-semibold"
-                  >
-                    <span>{isExpanded ? 'Hide Members' : 'View Members'}</span>
-                    {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                  </button>
+                <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center border border-blue-500/20">
+                  <Building2 size={20} />
                 </div>
               </div>
+              <p className="text-xs text-slate-500 mt-2">Active organizational units</p>
+            </Card>
 
-              {/* Department Roster Accordion Body */}
-              {isExpanded && (
-                <div className="p-5 bg-slate-950/60 animate-in fade-in duration-200">
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                      <Users size={14} className="text-blue-400" />
-                      Department Employees ({dept.members.length} Assigned Roster Members)
-                    </h4>
-                    <span className="text-xs text-slate-500">Total Department Workforce: {dept.employee_count}</span>
+            <Card className="border border-slate-800 bg-slate-900/60 p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Employees</p>
+                  <h3 className="text-2xl font-bold text-emerald-400 mt-1">{totalEmployeesCount}</h3>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20">
+                  <Users size={20} />
+                </div>
+              </div>
+              <p className="text-xs text-emerald-400/80 mt-2">Active assigned workforce</p>
+            </Card>
+
+            <Card className="border border-slate-800 bg-slate-900/60 p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Avg Security Score</p>
+                  <h3 className="text-2xl font-bold text-blue-400 mt-1">{avgRiskScore} / 100</h3>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
+                  <ShieldCheck size={20} />
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">Org security health average</p>
+            </Card>
+
+            <Card className="border border-slate-800 bg-slate-900/60 p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">High Risk Units</p>
+                  <h3 className="text-2xl font-bold text-rose-400 mt-1">
+                    {departments.filter(d => d.risk_score < 70).length}
+                  </h3>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center border border-rose-500/20">
+                  <ShieldAlert size={20} />
+                </div>
+              </div>
+              <p className="text-xs text-rose-400/80 mt-2">Score below 70% threshold</p>
+            </Card>
+          </div>
+
+          {/* Search Input Toolbar */}
+          <Card className="border border-slate-800 bg-slate-900/50 p-4">
+            <div className="relative w-full sm:w-96">
+              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by department name, role, or employee..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-slate-950/80 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 transition-colors"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          </Card>
+
+          {/* Departments Roster List */}
+          <div className="space-y-4">
+            {filteredDepartments.map((dept) => {
+              const isExpanded = expandedDeptId === dept.id;
+              const isHighRisk = dept.risk_score < 70;
+              const isMediumRisk = dept.risk_score >= 70 && dept.risk_score < 88;
+
+              return (
+                <Card key={dept.id} className="border border-slate-800 bg-slate-900/40 overflow-hidden transition-all">
+                  
+                  {/* Department Overview Banner */}
+                  <div className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/60 bg-slate-950/40">
+                    <div className="flex items-start gap-4">
+                      <div className={`p-3 rounded-2xl shrink-0 border ${
+                        isHighRisk 
+                          ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' 
+                          : isMediumRisk 
+                          ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' 
+                          : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      }`}>
+                        <Building2 size={24} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <h3 className="text-lg font-bold text-white">{dept.name}</h3>
+                          <span className="px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs font-extrabold flex items-center gap-1.5">
+                            <Users size={12} />
+                            {dept.employee_count} Employees
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-1 max-w-xl">{dept.description}</p>
+                      </div>
+                    </div>
+
+                    {/* Performance Metrics & Controls */}
+                    <div className="flex items-center gap-4 self-end md:self-center flex-wrap">
+                      
+                      {/* Security Score Badge */}
+                      <div className="text-right px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800">
+                        <span className="text-[10px] text-slate-500 block uppercase font-bold">Security Score</span>
+                        <span className={`text-base font-black ${
+                          isHighRisk ? 'text-rose-400' : isMediumRisk ? 'text-amber-400' : 'text-emerald-400'
+                        }`}>
+                          {dept.risk_score} / 100
+                        </span>
+                      </div>
+
+                      {/* ADMIN ONLY CONTROLS */}
+                      {isAdmin && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setTargetDeptId(dept.id);
+                              setIsAddMemberModalOpen(true);
+                            }}
+                            className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs shadow-lg shadow-blue-500/20 transition-all inline-flex items-center gap-1.5"
+                          >
+                            <UserPlus size={14} />
+                            <span>Add Employee</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteDepartment(dept.id, dept.name)}
+                            className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-all inline-flex items-center gap-1.5 text-xs font-semibold"
+                            title={`Delete department ${dept.name}`}
+                          >
+                            <Trash2 size={14} />
+                            <span className="hidden sm:inline">Delete</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* EMPLOYEE ONLY CONTROLS */}
+                      {!isAdmin && (() => {
+                        const isUserInThisDept = user?.department_name === dept.name || dept.members.some(m => m.email.toLowerCase() === user?.email.toLowerCase());
+                        const hasPendingReqForThisDept = myRequests.some(r => String(r.requestedDepartmentId) === String(dept.id));
+
+                        if (isUserInThisDept) {
+                          return (
+                            <div className="flex items-center gap-2">
+                              <span className="px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold flex items-center gap-1.5">
+                                <CheckCircle2 size={14} /> Your Department
+                              </span>
+                              <button
+                                onClick={handleLeaveDept}
+                                className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/20 text-xs font-bold transition-all flex items-center gap-1"
+                              >
+                                <LogOut size={13} />
+                                <span>Leave</span>
+                              </button>
+                            </div>
+                          );
+                        }
+
+                        if (hasPendingReqForThisDept) {
+                          return (
+                            <span className="px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-bold flex items-center gap-1.5">
+                              <Clock size={14} /> Request Pending Approval
+                            </span>
+                          );
+                        }
+
+                        return (
+                          <button
+                            onClick={() => handleRequestJoinOrSwitch(dept)}
+                            className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-500/20 transition-all inline-flex items-center gap-1.5"
+                          >
+                            <UserPlus size={14} />
+                            <span>{user?.department_name ? 'Request Switch' : 'Request to Join'}</span>
+                          </button>
+                        );
+                      })()}
+
+                      {/* Expand / Collapse Roster Toggle */}
+                      <button
+                        onClick={() => setExpandedDeptId(isExpanded ? null : dept.id)}
+                        className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all inline-flex items-center gap-1 text-xs font-semibold"
+                      >
+                        <span>{isExpanded ? 'Hide Members' : 'View Members'}</span>
+                        {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      </button>
+                    </div>
                   </div>
 
-                  {dept.members.length === 0 ? (
-                    <div className="py-8 text-center border border-dashed border-slate-800 rounded-xl bg-slate-900/30">
-                      <Users size={24} className="mx-auto text-slate-600 mb-2" />
-                      <p className="text-xs text-slate-400">No specific roster members loaded for {dept.name}.</p>
-                      {user?.is_admin && (
-                        <button
-                          onClick={() => {
-                            setTargetDeptId(dept.id);
-                            setIsAddMemberModalOpen(true);
-                          }}
-                          className="mt-3 text-xs font-semibold text-blue-400 hover:underline inline-flex items-center gap-1"
-                        >
-                          <UserPlus size={12} /> Add an employee to {dept.name}
-                        </button>
+                  {/* Department Roster Accordion Body */}
+                  {isExpanded && (
+                    <div className="p-5 bg-slate-950/60 animate-in fade-in duration-200">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                          <Users size={14} className="text-blue-400" />
+                          Department Employees ({dept.members.length} Assigned Roster Members)
+                        </h4>
+                        <span className="text-xs text-slate-500">Total Department Workforce: {dept.employee_count}</span>
+                      </div>
+
+                      {dept.members.length === 0 ? (
+                        <div className="py-8 text-center border border-dashed border-slate-800 rounded-xl bg-slate-900/30">
+                          <Users size={24} className="mx-auto text-slate-600 mb-2" />
+                          <p className="text-xs text-slate-400">No specific roster members loaded for {dept.name}.</p>
+                          {isAdmin && (
+                            <button
+                              onClick={() => {
+                                setTargetDeptId(dept.id);
+                                setIsAddMemberModalOpen(true);
+                              }}
+                              className="mt-3 text-xs font-semibold text-blue-400 hover:underline inline-flex items-center gap-1"
+                            >
+                              <UserPlus size={12} /> Add an employee to {dept.name}
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {dept.members.map((member) => (
+                            <div
+                              key={member.id}
+                              className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 flex items-center justify-between gap-3 transition-colors group"
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-9 h-9 rounded-full bg-slate-800 text-slate-300 font-bold text-xs flex items-center justify-center shrink-0 border border-slate-700">
+                                  {member.first_name[0]}{member.last_name[0]}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-white group-hover:text-blue-400 transition-colors truncate">
+                                    {member.first_name} {member.last_name}
+                                  </p>
+                                  <p className="text-[10px] text-slate-400 truncate">{member.email}</p>
+                                  <span className="text-[10px] text-slate-500">{member.role_name}</span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="text-xs font-extrabold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                                  {member.risk_score}%
+                                </span>
+
+                                {/* Remove Employee from Department (ONLY shown for Admin) */}
+                                {isAdmin && (
+                                  <button
+                                    onClick={() => handleRemoveMemberFromDept(dept.id, member)}
+                                    className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                                    title={`Remove ${member.first_name} from ${dept.name}`}
+                                  >
+                                    <UserMinus size={15} />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {dept.members.map((member) => (
-                        <div
-                          key={member.id}
-                          className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 flex items-center justify-between gap-3 transition-colors group"
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-9 h-9 rounded-full bg-slate-800 text-slate-300 font-bold text-xs flex items-center justify-center shrink-0 border border-slate-700">
-                              {member.first_name[0]}{member.last_name[0]}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-xs font-bold text-white group-hover:text-blue-400 transition-colors truncate">
-                                {member.first_name} {member.last_name}
-                              </p>
-                              <p className="text-[10px] text-slate-400 truncate">{member.email}</p>
-                              <span className="text-[10px] text-slate-500">{member.role_name}</span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-xs font-extrabold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                              {member.risk_score}%
-                            </span>
-
-                            {/* Remove Employee from Department (Admin Action) */}
-                            {user?.is_admin && (
-                              <button
-                                onClick={() => handleRemoveMemberFromDept(dept.id, member)}
-                                className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-                                title={`Remove ${member.first_name} from ${dept.name}`}
-                              >
-                                <UserMinus size={15} />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
                   )}
-                </div>
-              )}
-            </Card>
-          );
-        })}
-      </div>
+                </Card>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       {/* Add Employee to Department Modal (Admin Only) */}
-      {isAddMemberModalOpen && user?.is_admin && (
+      {isAddMemberModalOpen && isAdmin && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="max-w-md w-full rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl p-6 relative">
             <button
@@ -620,6 +959,75 @@ export default function DepartmentPerformance() {
                 >
                   {isSubmitting && <Loader2 size={14} className="animate-spin" />}
                   <span>Assign to Department</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add New Department Modal (Admin Only) */}
+      {isCreateDeptModalOpen && isAdmin && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="max-w-md w-full rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl p-6 relative">
+            <button
+              onClick={() => setIsCreateDeptModalOpen(false)}
+              className="absolute top-4 right-4 text-slate-500 hover:text-slate-300 p-1"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="flex items-center gap-3 mb-5">
+              <div className="p-3 bg-blue-500/10 text-blue-400 rounded-xl border border-blue-500/20">
+                <Building2 size={22} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Add New Department</h3>
+                <p className="text-xs text-slate-400">
+                  Create an organizational unit in the database.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleCreateDepartment} className="space-y-4">
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">Department Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Quality Assurance & Compliance"
+                  value={newDeptName}
+                  onChange={(e) => setNewDeptName(e.target.value)}
+                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">Department Description</label>
+                <textarea
+                  rows={3}
+                  placeholder="Summary of department functions and responsibilities..."
+                  value={newDeptDesc}
+                  onChange={(e) => setNewDeptDesc(e.target.value)}
+                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateDeptModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-lg shadow-blue-500/20 transition-all inline-flex items-center gap-2"
+                >
+                  {isSubmitting && <Loader2 size={14} className="animate-spin" />}
+                  <span>Create Department</span>
                 </button>
               </div>
             </form>

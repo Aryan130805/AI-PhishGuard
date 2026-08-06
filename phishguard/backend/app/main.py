@@ -11,7 +11,7 @@ import redis
 
 from app.logging_config import setup_logging, LoggingMiddleware
 from app.exceptions import add_exception_handlers
-from app.routers import auth, users, campaigns, templates, tracking, extension, analytics, risk, training, notifications, reports, organizations, chat
+from app.routers import auth, users, campaigns, templates, tracking, extension, analytics, risk, training, notifications, reports, organizations, chat, groups, departments
 
 def create_app() -> FastAPI:
     # Setup structured logging configuration
@@ -69,9 +69,18 @@ def create_app() -> FastAPI:
     app.include_router(reports.router)
     app.include_router(organizations.router)
     app.include_router(chat.router)
+    app.include_router(groups.router)
+    app.include_router(groups.training_router)
+    app.include_router(departments.router)
 
     @app.on_event("startup")
     def sync_db_columns():
+        # Ensure database tables exist for all SQLAlchemy models
+        from app.database import engine, Base
+        try:
+            Base.metadata.create_all(bind=engine)
+        except Exception as err:
+            print(f"[startup] Table creation notice: {err}")
         # This patcher is only needed for SQLite (local dev without Supabase).
         # When connected to PostgreSQL / Supabase the schema is already fully
         # applied via supabase_migration.sql, so we skip it entirely to avoid

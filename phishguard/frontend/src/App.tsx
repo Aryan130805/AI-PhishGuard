@@ -1,4 +1,10 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
+
+function EmployeeSubpathRedirect() {
+  const params = useParams();
+  const subpath = params['*'] || '';
+  return <Navigate to={subpath ? `/${subpath}` : '/dashboard'} replace />;
+}
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import { ToastProvider } from './components/ui/Toast';
@@ -24,6 +30,7 @@ import AdminCampaigns from './pages/AdminCampaigns';
 import AdminAnalytics from './pages/AdminAnalytics';
 import AdminReports from './pages/AdminReports';
 import AdminUsers from './pages/AdminUsers';
+import AdminDepartments from './pages/AdminDepartments';
 import AdminHeatmap from './pages/AdminHeatmap';
 import AdminAiGenerator from './pages/AdminAiGenerator';
 import AdminNotifications from './pages/AdminNotifications';
@@ -37,6 +44,7 @@ import EmployeeLessons from './pages/EmployeeLessons';
 import EmployeeQuiz from './pages/EmployeeQuiz';
 import EmployeeQuizzesPage from './pages/EmployeeQuizzesPage';
 import EmployeeCertificates from './pages/EmployeeCertificates';
+import EmployeeDepartments from './pages/EmployeeDepartments';
 import DepartmentPerformance from './pages/DepartmentPerformance';
 import EmployeeProfile from './pages/EmployeeProfile';
 import EmployeeNotifications from './pages/EmployeeNotifications';
@@ -86,7 +94,7 @@ export default function App() {
                 <Route path="/templates" element={<AdminAiGenerator />} />
                 <Route path="/ai-generator" element={<AdminAiGenerator />} />
                 <Route path="/employees" element={<AdminUsers />} />
-                <Route path="/departments" element={<DepartmentPerformance />} />
+                <Route path="/departments" element={<EmployeeDepartments />} />
                 <Route path="/groups" element={<EmployeeSecurityGroups />} />
                 <Route path="/ai-email" element={<AdminAiGenerator />} />
                 <Route path="/ai-coach" element={
@@ -138,6 +146,7 @@ export default function App() {
             {/* Legacy /employee/* redirects */}
             <Route path="/employee" element={<Navigate to="/dashboard" replace />} />
             <Route path="/employee/dashboard" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/employee/*" element={<EmployeeSubpathRedirect />} />
 
             {/* ── Admin Portal (Protected) ─────────────────────────────────── */}
             <Route element={<RequireAdmin />}>
@@ -155,7 +164,7 @@ export default function App() {
                 <Route path="reports" element={<AdminReports />} />
                 <Route path="users" element={<AdminUsers />} />
                 <Route path="employees" element={<AdminUsers />} />
-                <Route path="departments" element={<DepartmentPerformance />} />
+                <Route path="departments" element={<AdminDepartments />} />
                 <Route path="groups" element={<EmployeeSecurityGroups />} />
                 <Route path="heatmap" element={<AdminHeatmap />} />
                 <Route path="ai-generator" element={<AdminAiGenerator />} />

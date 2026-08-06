@@ -297,3 +297,50 @@ INSERT INTO public.roles (id, name, description) VALUES
 (1, 'admin', 'Organization Administrator'),
 (2, 'employee', 'Standard Employee target')
 ON CONFLICT (id) DO NOTHING;
+
+-- ====================================================================
+-- Security Groups & Join Requests Tables
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS public.security_groups (
+    id SERIAL PRIMARY KEY,
+    organization_id INT NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    code VARCHAR(100) NOT NULL,
+    tier VARCHAR(100) DEFAULT 'Tier 4 (Standard)' NOT NULL,
+    tier_number INT DEFAULT 4 NOT NULL,
+    description TEXT,
+    simulation_frequency VARCHAR(50) DEFAULT 'Bi-weekly',
+    simulation_type VARCHAR(255) DEFAULT 'Spear Phishing & Link Verification',
+    risk_score INT DEFAULT 15,
+    policies JSONB,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS public.group_join_requests (
+    id SERIAL PRIMARY KEY,
+    organization_id INT NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+    user_id INT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    group_id INT NOT NULL REFERENCES public.security_groups(id) ON DELETE CASCADE,
+    requested_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(50) DEFAULT 'pending' NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.group_members (
+    id SERIAL PRIMARY KEY,
+    organization_id INT NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+    group_id INT NOT NULL REFERENCES public.security_groups(id) ON DELETE CASCADE,
+    user_id INT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    joined_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS public.department_requests (
+    id SERIAL PRIMARY KEY,
+    organization_id INT NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+    user_id INT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    department_id INT NOT NULL REFERENCES public.departments(id) ON DELETE CASCADE,
+    request_type VARCHAR(50) DEFAULT 'join' NOT NULL,
+    status VARCHAR(50) DEFAULT 'pending' NOT NULL,
+    requested_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+

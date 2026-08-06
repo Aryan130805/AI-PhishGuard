@@ -9,6 +9,7 @@ import {
 import NotificationBell from '../components/ui/NotificationBell';
 import PhishGuardAIChat from '../components/ui/PhishGuardAIChat';
 import { useAuth } from '../AuthContext';
+import { apiFetch } from '../lib/api';
 
 interface NavGroup {
   category: string;
@@ -30,7 +31,11 @@ export default function EmployeeLayout() {
   const profileRef = useRef<HTMLDivElement>(null);
 
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, refreshProfile } = useAuth();
+
+  useEffect(() => {
+    refreshProfile();
+  }, [refreshProfile]);
 
   const navGroups: NavGroup[] = [
     {
@@ -250,7 +255,7 @@ export default function EmployeeLayout() {
                   <div className="hidden sm:block text-left">
                     <p className="text-xs font-semibold text-slate-200 group-hover:text-emerald-400 transition-colors leading-tight">{displayName()}</p>
                     {user && (
-                      <p className="text-[10px] text-slate-400 leading-tight">{user.department_name || 'General Dept'}</p>
+                      <p className="text-[10px] text-slate-400 leading-tight">{user.department_name || 'Unassigned'}</p>
                     )}
                   </div>
                   <ChevronDown size={14} className={`text-slate-400 transition-transform duration-200 ${profileDropdownOpen ? 'rotate-180 text-emerald-400' : ''}`} />
@@ -267,7 +272,7 @@ export default function EmployeeLayout() {
                           <p className="text-xs font-bold text-slate-100">{user.email}</p>
                           <div className="flex items-center gap-1.5 mt-1">
                             <span className="text-[10px] text-slate-400 truncate">
-                              {user.department_name || 'General Dept'}
+                              {user.department_name || 'Unassigned'}
                             </span>
                           </div>
                         </div>

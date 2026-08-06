@@ -32,6 +32,7 @@ interface AuthContextValue {
    */
   login: (email: string, password: string) => Promise<{ ok: boolean; role: UserRole; detail?: string }>;
   logout: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 // ─── Context ─────────────────────────────────────────────────────────────────
@@ -41,8 +42,19 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function fetchSupabaseProfile(supabaseUid: string, email?: string): Promise<AuthUser | null> {
+  // 1. Try local backend /users/me API first (Primary DB profile)
   try {
-    // 1. Query by supabase_uid
+    const res = await apiFetch('/users/me').catch(() => null);
+    if (res && res.ok) {
+      const u: AuthUser = await res.json();
+      if (u && u.email) return u;
+    }
+  } catch {
+    // ignore
+  }
+
+  // 2. Query Supabase DB by supabase_uid or email
+  try {
     let { data } = await supabase
       .from('users')
       .select(`
@@ -57,7 +69,6 @@ async function fetchSupabaseProfile(supabaseUid: string, email?: string): Promis
       .eq('supabase_uid', supabaseUid)
       .maybeSingle();
 
-    // 2. Fallback query by email
     if (!data && email) {
       const res = await supabase
         .from('users')
@@ -91,7 +102,20 @@ async function fetchSupabaseProfile(supabaseUid: string, email?: string): Promis
     console.warn('[Auth] fetchSupabaseProfile error:', err);
   }
 
-  // 3. Last fallback if database profile row is missing
+  // 3. Fallback check cached user profile to prevent erasing department_name
+  const cachedStr = localStorage.getItem('pg_user');
+  if (cachedStr) {
+    try {
+      const cached: AuthUser = JSON.parse(cachedStr);
+      if (cached && (cached.email === email || String(cached.id) === String(supabaseUid))) {
+        return cached;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 4. Last fallback if profile row is missing
   if (email) {
     const isAdminEmail = email.toLowerCase().includes('admin');
     return {
@@ -302,8 +326,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
   }, []);
 
+  const refreshProfile = useCallback(async () => {
+    try {
+      const res = await apiFetch('/users/me').catch(() => null);
+      if (res && res.ok) {
+        const data: AuthUser = await res.json();
+        setUser(data);
+        localStorage.setItem('pg_user', JSON.stringify(data));
+      }
+    } catch (err) {
+      console.warn('[Auth] refreshProfile error:', err);
+    }
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, supabaseUser, session, role, isAdmin, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, supabaseUser, session, role, isAdmin, isLoading, login, logout, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

@@ -176,34 +176,7 @@ const INITIAL_GROUPS: SecurityGroup[] = [
   }
 ];
 
-const INITIAL_JOIN_REQUESTS: JoinRequest[] = [
-  {
-    id: 'req-101',
-    userId: 'usr-20',
-    userName: 'David Miller',
-    userEmail: 'david.m@company.com',
-    userDepartment: 'Engineering',
-    userRole: 'Full Stack Engineer',
-    groupId: 'grp-2',
-    groupName: 'IT Systems & DevOps Security Tier',
-    groupTier: 'Tier 1 (Critical HVT)',
-    requestedAt: 'Today at 10:45 AM',
-    status: 'pending'
-  },
-  {
-    id: 'req-102',
-    userId: 'usr-21',
-    userName: 'Samantha Reed',
-    userEmail: 'samantha.r@company.com',
-    userDepartment: 'Sales',
-    userRole: 'Account Manager',
-    groupId: 'grp-4',
-    groupName: 'Sales & Customer Inbound Tier',
-    groupTier: 'Tier 3 (Inbound Facing)',
-    requestedAt: 'Yesterday at 3:15 PM',
-    status: 'pending'
-  }
-];
+const INITIAL_JOIN_REQUESTS: JoinRequest[] = [];
 
 export default function EmployeeSecurityGroups() {
   const { addToast } = useToast();
@@ -215,7 +188,7 @@ export default function EmployeeSecurityGroups() {
   const userName = userEmail.split('@')[0].replace('.', ' ').replace(/(^\w|\s\w)/g, m => m.toUpperCase());
 
   const [groups, setGroups] = useState<SecurityGroup[]>(INITIAL_GROUPS);
-  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>(INITIAL_JOIN_REQUESTS);
+  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
   
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedTierFilter, setSelectedTierFilter] = useState<string>('All');
@@ -248,7 +221,7 @@ export default function EmployeeSecurityGroups() {
 
   const fetchGroups = async () => {
     try {
-      const res = await apiFetch('/training/groups').catch(() => null);
+      const res = await apiFetch('/groups').catch(() => null);
       if (res && res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
@@ -260,8 +233,23 @@ export default function EmployeeSecurityGroups() {
     }
   };
 
+  const fetchRequests = async () => {
+    try {
+      const res = await apiFetch('/groups/requests').catch(() => null);
+      if (res && res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setJoinRequests(data);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     fetchGroups();
+    fetchRequests();
   }, []);
 
   // Determine current employee membership & pending requests
@@ -330,7 +318,7 @@ export default function EmployeeSecurityGroups() {
 
   // ── Employee Actions ────────────────────────────────────────────────────────
 
-  const handleRequestToJoin = (group: SecurityGroup) => {
+  const handleRequestToJoin = async (group: SecurityGroup) => {
     if (userJoinedGroup) {
       addToast({
         title: 'Already Enrolled',
@@ -349,49 +337,66 @@ export default function EmployeeSecurityGroups() {
       return;
     }
 
-    const newReq: JoinRequest = {
-      id: `req-${Date.now()}`,
-      userId: `usr-${Date.now()}`,
-      userName: userName,
-      userEmail: userEmail,
-      userDepartment: 'Engineering',
-      userRole: 'Security Associate',
-      groupId: group.id,
-      groupName: group.name,
-      groupTier: group.tier,
-      requestedAt: 'Just now',
-      status: 'pending'
-    };
-
-    setJoinRequests(prev => [newReq, ...prev]);
-
-    addToast({
-      title: 'Join Request Submitted! 📩',
-      description: `Requested to join "${group.name}". Awaiting security administrator approval.`,
-      type: 'success'
-    });
+    try {
+      const res = await apiFetch(`/groups/${group.id}/join-request`, {
+        method: 'POST'
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        addToast({
+          title: 'Join Request Submitted! 📩',
+          description: `Requested to join "${group.name}". Awaiting security administrator approval.`,
+          type: 'success'
+        });
+        await fetchRequests();
+        await fetchGroups();
+      } else {
+        addToast({
+          title: 'Request Failed',
+          description: data.detail || 'Could not submit join request.',
+          type: 'error'
+        });
+      }
+    } catch {
+      addToast({
+        title: 'Error',
+        description: 'Failed to communicate with server.',
+        type: 'error'
+      });
+    }
   };
 
-  const handleLeaveGroup = (groupId: string) => {
+  const handleLeaveGroup = async (groupId: string) => {
     const targetGroup = groups.find(g => g.id === groupId);
     if (!targetGroup) return;
 
-    setGroups(prev => prev.map(g => {
-      if (g.id === groupId) {
-        return {
-          ...g,
-          membersCount: Math.max(0, g.membersCount - 1),
-          members: g.members.filter(m => m.email.toLowerCase() !== userEmail.toLowerCase())
-        };
+    try {
+      const res = await apiFetch(`/groups/${groupId}/leave`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        addToast({
+          title: 'Left Security Group',
+          description: `You have left "${targetGroup.name}". You can now request to join another security group below.`,
+          type: 'info'
+        });
+        await fetchGroups();
+        await fetchRequests();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        addToast({
+          title: 'Error',
+          description: data.detail || 'Could not leave group.',
+          type: 'error'
+        });
       }
-      return g;
-    }));
-
-    addToast({
-      title: 'Left Security Group',
-      description: `You have left "${targetGroup.name}". You can now request to join another security group below.`,
-      type: 'info'
-    });
+    } catch {
+      addToast({
+        title: 'Error',
+        description: 'Failed to communicate with server.',
+        type: 'error'
+      });
+    }
   };
 
   const handleCancelRequest = (reqId: string) => {
@@ -409,47 +414,64 @@ export default function EmployeeSecurityGroups() {
 
   // ── Admin Actions ───────────────────────────────────────────────────────────
 
-  const handleApproveRequest = (request: JoinRequest) => {
-    // 1. Update request status to approved
-    setJoinRequests(prev => prev.map(r => r.id === request.id ? { ...r, status: 'approved' } : r));
-
-    // 2. Add employee to the target group
-    const newMember: GroupMember = {
-      id: request.userId,
-      name: request.userName,
-      email: request.userEmail,
-      department: request.userDepartment,
-      role: request.userRole,
-      riskScore: Math.floor(Math.random() * 15) + 10
-    };
-
-    setGroups(prev => prev.map(g => {
-      if (g.id === request.groupId) {
-        const alreadyMember = g.members.some(m => m.email.toLowerCase() === request.userEmail.toLowerCase());
-        if (alreadyMember) return g;
-        return {
-          ...g,
-          membersCount: g.membersCount + 1,
-          members: [newMember, ...g.members]
-        };
+  const handleApproveRequest = async (request: JoinRequest) => {
+    try {
+      const res = await apiFetch(`/groups/requests/${request.id}/approve`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        addToast({
+          title: 'Join Request Approved! ✅',
+          description: `Approved ${request.userName} into security group "${request.groupName}".`,
+          type: 'success'
+        });
+        await fetchRequests();
+        await fetchGroups();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        addToast({
+          title: 'Approval Failed',
+          description: data.detail || 'Could not approve request.',
+          type: 'error'
+        });
       }
-      return g;
-    }));
-
-    addToast({
-      title: 'Join Request Approved! ✅',
-      description: `Approved ${request.userName} into security group "${request.groupName}".`,
-      type: 'success'
-    });
+    } catch {
+      addToast({
+        title: 'Error',
+        description: 'Failed to communicate with server.',
+        type: 'error'
+      });
+    }
   };
 
-  const handleRejectRequest = (request: JoinRequest) => {
-    setJoinRequests(prev => prev.map(r => r.id === request.id ? { ...r, status: 'rejected' } : r));
-    addToast({
-      title: 'Join Request Rejected ❌',
-      description: `Rejected join request from ${request.userName} for "${request.groupName}". The employee will receive a rejection notification.`,
-      type: 'error'
-    });
+  const handleRejectRequest = async (request: JoinRequest) => {
+    try {
+      const res = await apiFetch(`/groups/requests/${request.id}/reject`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        addToast({
+          title: 'Join Request Rejected ❌',
+          description: `Rejected join request from ${request.userName} for "${request.groupName}". Request removed from database.`,
+          type: 'error'
+        });
+        await fetchRequests();
+        await fetchGroups();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        addToast({
+          title: 'Rejection Failed',
+          description: data.detail || 'Could not reject request.',
+          type: 'error'
+        });
+      }
+    } catch {
+      addToast({
+        title: 'Error',
+        description: 'Failed to communicate with server.',
+        type: 'error'
+      });
+    }
   };
 
   const handleCreateGroup = async (e: React.FormEvent) => {
@@ -459,42 +481,37 @@ export default function EmployeeSecurityGroups() {
       return;
     }
 
-    const tierNum = newGroupTier.includes('1') ? 1 : newGroupTier.includes('2') ? 2 : newGroupTier.includes('3') ? 3 : 4;
-    const code = newGroupCode || newGroupName.substring(0, 4).toUpperCase() + '-GRP';
+    try {
+      const res = await apiFetch('/groups', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: newGroupName,
+          code: newGroupCode,
+          tier: newGroupTier,
+          description: newGroupDesc,
+          simulationFrequency: newGroupFreq,
+          simulationType: newGroupType
+        })
+      });
 
-    const newGroup: SecurityGroup = {
-      id: `grp-${Date.now()}`,
-      name: newGroupName,
-      code,
-      tier: newGroupTier,
-      tierNumber: tierNum as 1 | 2 | 3 | 4,
-      description: newGroupDesc,
-      simulationFrequency: newGroupFreq,
-      simulationType: newGroupType,
-      riskScore: Math.floor(Math.random() * 15) + 10,
-      membersCount: 1,
-      departments: ['General Security'],
-      policies: [
-        'Mandatory Multi-Factor Authentication',
-        'Targeted Phishing Simulation Drills',
-        'Real-time Security Telemetry'
-      ],
-      members: [
-        { id: `usr-${Date.now()}`, name: userName, email: userEmail, department: 'IT Security', role: 'Security Analyst', riskScore: 12 }
-      ]
-    };
-
-    setGroups(prev => [newGroup, ...prev]);
-    setShowCreateModal(false);
-    setNewGroupName('');
-    setNewGroupCode('');
-    setNewGroupDesc('');
-    
-    addToast({
-      title: 'Security Group Created! 🛡️',
-      description: `Successfully configured group "${newGroupName}" under ${newGroupTier}.`,
-      type: 'success'
-    });
+      if (res.ok) {
+        setShowCreateModal(false);
+        setNewGroupName('');
+        setNewGroupCode('');
+        setNewGroupDesc('');
+        addToast({
+          title: 'Security Group Created! 🛡️',
+          description: `Successfully configured group "${newGroupName}".`,
+          type: 'success'
+        });
+        await fetchGroups();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        addToast({ title: 'Error', description: data.detail || 'Failed to create group.', type: 'error' });
+      }
+    } catch {
+      addToast({ title: 'Error', description: 'Failed to communicate with server.', type: 'error' });
+    }
   };
 
   const handleOpenMembersModal = (group: SecurityGroup) => {
@@ -502,76 +519,83 @@ export default function EmployeeSecurityGroups() {
     setShowMembersModal(true);
   };
 
-  const handleAddMember = (e: React.FormEvent) => {
+  const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeManagingGroup || !newMemberName || !newMemberEmail) {
       addToast({ title: 'Invalid Member Info', description: 'Provide valid member name and email.', type: 'error' });
       return;
     }
 
-    const newMember: GroupMember = {
-      id: `usr-${Date.now()}`,
-      name: newMemberName,
-      email: newMemberEmail,
-      department: newMemberDept,
-      role: newMemberRole,
-      riskScore: Math.floor(Math.random() * 20) + 10
-    };
+    try {
+      const res = await apiFetch(`/groups/${activeManagingGroup.id}/members`, {
+        method: 'POST',
+        body: JSON.stringify({
+          name: newMemberName,
+          email: newMemberEmail,
+          department: newMemberDept,
+          role: newMemberRole
+        })
+      });
 
-    const updatedGroups = groups.map(g => {
-      if (g.id === activeManagingGroup.id) {
-        return {
-          ...g,
-          membersCount: g.membersCount + 1,
-          members: [newMember, ...g.members]
-        };
+      if (res.ok) {
+        setNewMemberName('');
+        setNewMemberEmail('');
+        addToast({
+          title: 'Member Added! 👤',
+          description: `Added ${newMemberName} to security group ${activeManagingGroup.name}.`,
+          type: 'success'
+        });
+        await fetchGroups();
+        // Update active modal group
+        const updatedRes = await apiFetch('/groups');
+        if (updatedRes.ok) {
+          const freshGroups: SecurityGroup[] = await updatedRes.json();
+          const target = freshGroups.find(g => String(g.id) === String(activeManagingGroup.id));
+          if (target) setActiveManagingGroup(target);
+        }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        addToast({ title: 'Error', description: data.detail || 'Failed to add member.', type: 'error' });
       }
-      return g;
-    });
-
-    setGroups(updatedGroups);
-    setActiveManagingGroup(prev => prev ? {
-      ...prev,
-      membersCount: prev.membersCount + 1,
-      members: [newMember, ...prev.members]
-    } : null);
-
-    setNewMemberName('');
-    setNewMemberEmail('');
-    
-    addToast({
-      title: 'Member Added! 👤',
-      description: `Added ${newMemberName} to security group ${activeManagingGroup.name}.`,
-      type: 'success'
-    });
+    } catch {
+      addToast({ title: 'Error', description: 'Failed to communicate with server.', type: 'error' });
+    }
   };
 
-  const handleRemoveMember = (memberId: string) => {
+  const handleRemoveMember = async (memberId: string) => {
     if (!activeManagingGroup) return;
 
-    const updatedGroups = groups.map(g => {
-      if (g.id === activeManagingGroup.id) {
-        return {
-          ...g,
-          membersCount: Math.max(0, g.membersCount - 1),
-          members: g.members.filter(m => m.id !== memberId)
-        };
+    try {
+      const res = await apiFetch(`/groups/${activeManagingGroup.id}/members/${memberId}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        addToast({
+          title: 'Member Removed',
+          description: 'Removed member from security group.',
+          type: 'info'
+        });
+        await fetchGroups();
+        setActiveManagingGroup(prev => prev ? {
+          ...prev,
+          membersCount: Math.max(0, prev.membersCount - 1),
+          members: prev.members.filter(m => m.id !== memberId)
+        } : null);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        addToast({
+          title: 'Error',
+          description: data.detail || 'Could not remove member.',
+          type: 'error'
+        });
       }
-      return g;
-    });
-
-    setGroups(updatedGroups);
-    setActiveManagingGroup(prev => prev ? {
-      ...prev,
-      membersCount: Math.max(0, prev.membersCount - 1),
-      members: prev.members.filter(m => m.id !== memberId)
-    } : null);
-
-    addToast({
-      title: 'Member Removed',
-      description: 'Removed member from security group.',
-      type: 'info'
-    });
+    } catch {
+      addToast({
+        title: 'Error',
+        description: 'Failed to communicate with server.',
+        type: 'error'
+      });
+    }
   };
 
   const handleOpenPolicyModal = (group: SecurityGroup) => {
@@ -590,22 +614,30 @@ export default function EmployeeSecurityGroups() {
     setPolicyInputs(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleSavePolicies = () => {
+  const handleSavePolicies = async () => {
     if (!activePolicyGroup) return;
 
-    setGroups(prev => prev.map(g => {
-      if (g.id === activePolicyGroup.id) {
-        return { ...g, policies: policyInputs };
-      }
-      return g;
-    }));
+    try {
+      const res = await apiFetch(`/groups/${activePolicyGroup.id}/policies`, {
+        method: 'PUT',
+        body: JSON.stringify({ policies: policyInputs })
+      });
 
-    setShowPolicyModal(false);
-    addToast({
-      title: 'Security Policies Saved! 🔒',
-      description: `Updated security policies for ${activePolicyGroup.name}.`,
-      type: 'success'
-    });
+      if (res.ok) {
+        setShowPolicyModal(false);
+        addToast({
+          title: 'Policies Updated 🛡️',
+          description: `Updated defense policies for group "${activePolicyGroup.name}".`,
+          type: 'success'
+        });
+        await fetchGroups();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        addToast({ title: 'Error', description: data.detail || 'Failed to update policies.', type: 'error' });
+      }
+    } catch {
+      addToast({ title: 'Error', description: 'Failed to communicate with server.', type: 'error' });
+    }
   };
 
   const handleLaunchDrill = (group: SecurityGroup) => {

@@ -2,6 +2,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 from datetime import datetime, timezone
 from typing import Optional, List
 from pydantic import BaseModel
@@ -445,15 +446,69 @@ DEFAULT_LESSONS_DATA = [
     }
 ]
 
+def infer_lesson_category(title: str = "", topic: str = "", current_cat: str = None) -> str:
+    valid_cats = [
+        "Phishing Attacks", "Malware & Ransomware", "Password & Authentication Security",
+        "Social Engineering", "Network Security", "Cloud Security",
+        "AI & Modern Cyber Threats", "Mobile Security", "Workplace Security", "Emerging Threat Intelligence"
+    ]
+    if current_cat and current_cat in valid_cats and current_cat != "Phishing Attacks":
+        return current_cat
+    
+    t_title = (title or "").lower()
+    t_topic = (topic or "").lower()
+
+    if "phish" in t_topic or "phish" in t_title or "quish" in t_title or "spoof" in t_title or "link" in t_topic:
+        return "Phishing Attacks"
+    if "malware" in t_topic or "ransomware" in t_topic or "ransomware" in t_title or "trojan" in t_title or "keylogger" in t_title:
+        return "Malware & Ransomware"
+    if "password" in t_topic or "mfa" in t_topic or "credential" in t_topic or "password" in t_title or "authentication" in t_title or "passkey" in t_title or "2fa" in t_title or "hygiene" in t_title:
+        return "Password & Authentication Security"
+    if "social" in t_topic or "pretext" in t_topic or "vishing" in t_title or "impersonation" in t_title or "social engineering" in t_title:
+        return "Social Engineering"
+    if "network" in t_topic or "wifi" in t_topic or "wi-fi" in t_title or "vpn" in t_title or "hotspot" in t_title:
+        return "Network Security"
+    if "cloud" in t_topic or "cloud" in t_title or "iam" in t_title or "s3" in t_title or "saas" in t_title:
+        return "Cloud Security"
+    if "ai" in t_topic or "ai" in t_title or "deepfake" in t_title or "prompt" in t_title:
+        return "AI & Modern Cyber Threats"
+    if "mobile" in t_topic or "mobile" in t_title or "smishing" in t_title or "apk" in t_title or "sim" in t_title:
+        return "Mobile Security"
+    if "workplace" in t_topic or "clean desk" in t_title or "tailgating" in t_title or "usb" in t_title:
+        return "Workplace Security"
+    if "emerging" in t_topic or "cve" in t_title or "zero-day" in t_title:
+        return "Emerging Threat Intelligence"
+
+    if current_cat and current_cat in valid_cats:
+        return current_cat
+
+    return "General Security"
+
+def infer_lesson_difficulty(title: str, topic: str = "", category: str = "", current_diff: Optional[str] = None) -> str:
+    t_title = (title or "").lower()
+    t_topic = (topic or "").lower()
+    t_cat = (category or "").lower()
+
+    if "keylogger" in t_title or "supply chain" in t_title or "cloud" in t_title or "cloud" in t_cat or "cloud" in t_topic or "ai" in t_title or "ai" in t_cat or "ai" in t_topic or "deepfake" in t_title or "prompt" in t_title or "cve" in t_title or "zero-day" in t_title or "masterclass" in t_title:
+        return "Advanced"
+
+    if "spear" in t_title or "whaling" in t_title or "ransomware" in t_title or "ransomware" in t_topic or "pretexting" in t_title or "vishing" in t_title or "impersonation" in t_title or "trojan" in t_title or "saas" in t_title or "credential" in t_topic or "social" in t_cat or "malware" in t_cat or "mobile" in t_topic:
+        return "Intermediate"
+
+    if current_diff and isinstance(current_diff, str) and current_diff.strip() in ["Beginner", "Intermediate", "Advanced"]:
+        return current_diff.strip()
+
+    return "Beginner"
+
 def ensure_seeded_lessons(db: Session):
-    existing_titles = {l.title for l in db.query(Lesson).all()}
+    existing_lessons = {l.title: l for l in db.query(Lesson).all()}
     for item in DEFAULT_LESSONS_DATA:
-        if item["title"] not in existing_titles:
+        if item["title"] not in existing_lessons:
             new_lesson = Lesson(
                 topic=item["topic"],
                 title=item["title"],
                 content=item["content"],
-                category=item.get("category", "Phishing Attacks"),
+                category=item.get("category", "General Security"),
                 difficulty=item.get("difficulty", "Beginner"),
                 summary=item.get("summary", ""),
                 is_emerging_threat=item.get("category") == "Emerging Threat Intelligence",
@@ -466,9 +521,44 @@ def ensure_seeded_lessons(db: Session):
             if "quiz" in item and item["quiz"]:
                 new_quiz = Quiz(
                     lesson_id=new_lesson.id,
+                    title=f"{item['title']} Quiz",
+                    category=item.get("category", "General Security"),
+                    difficulty=item.get("difficulty", "Beginner"),
+                    summary=f"Knowledge check for {item['title']}",
                     questions=item["quiz"]
                 )
                 db.add(new_quiz)
+        else:
+            existing = existing_lessons[item["title"]]
+            if item.get("category"):
+                existing.category = item["category"]
+            if item.get("topic"):
+                existing.topic = item["topic"]
+            if item.get("difficulty"):
+                existing.difficulty = item["difficulty"]
+            if item.get("summary"):
+                existing.summary = item["summary"]
+
+            quiz = db.query(Quiz).filter(Quiz.lesson_id == existing.id).first()
+            if quiz and item.get("category"):
+                quiz.category = item["category"]
+
+    # Sweep all lessons and quizzes to ensure proper category & difficulty assignment
+    all_lessons = db.query(Lesson).all()
+    for l in all_lessons:
+        inferred_cat = infer_lesson_category(l.title, l.topic, l.category)
+        inferred_diff = infer_lesson_difficulty(l.title, l.topic, l.category, getattr(l, "difficulty", None))
+        if l.category != inferred_cat:
+            l.category = inferred_cat
+        if getattr(l, "difficulty", None) != inferred_diff:
+            l.difficulty = inferred_diff
+        quiz = db.query(Quiz).filter(Quiz.lesson_id == l.id).first()
+        if quiz:
+            if quiz.category != inferred_cat:
+                quiz.category = inferred_cat
+            if getattr(quiz, "difficulty", None) != inferred_diff:
+                quiz.difficulty = inferred_diff
+
     db.commit()
 
 def ensure_user_assignments(user_id: int, db: Session):
@@ -527,7 +617,7 @@ def get_assignments(
                 "topic": lesson.topic,
                 "title": lesson.title,
                 "content": lesson.content,
-                "category": getattr(lesson, "category", "Phishing Attacks") or "Phishing Attacks",
+                "category": infer_lesson_category(getattr(lesson, "title", ""), getattr(lesson, "topic", ""), getattr(lesson, "category", None)),
                 "difficulty": getattr(lesson, "difficulty", "Beginner") or "Beginner",
                 "summary": getattr(lesson, "summary", "") or "",
                 "is_emerging_threat": getattr(lesson, "is_emerging_threat", False),
@@ -564,8 +654,8 @@ def get_lessons(
         if not is_pub and org_id and org_id != current_user.organization_id:
             continue
 
-        cat = getattr(lesson, "category", "Phishing Attacks") or "Phishing Attacks"
-        diff = getattr(lesson, "difficulty", "Beginner") or "Beginner"
+        cat = infer_lesson_category(getattr(lesson, "title", ""), getattr(lesson, "topic", ""), getattr(lesson, "category", None))
+        diff = infer_lesson_difficulty(getattr(lesson, "title", ""), getattr(lesson, "topic", ""), getattr(lesson, "category", None), getattr(lesson, "difficulty", None))
 
         if category and category.strip() and category.lower() != "all" and cat.lower() != category.lower():
             continue
@@ -585,9 +675,54 @@ def get_lessons(
             "organization_id": org_id,
             "assigned_at": assoc.assigned_at,
             "completed_at": assoc.completed_at,
-            "completed": assoc.completed_at is not None
+            "completed": assoc.completed_at is not None,
+            "completed_sections": getattr(assoc, "completed_sections", []) or [],
+            "current_section": getattr(assoc, "current_section", 0) or 0
         })
     return results
+
+class SectionProgressPayload(BaseModel):
+    section_index: int
+    total_sections: int
+
+@router.post("/lessons/{id}/section-progress")
+def update_section_progress(
+    id: int,
+    payload: SectionProgressPayload,
+    current_user: User = Depends(require_role(["admin", "employee"])),
+    db: Session = Depends(get_db)
+):
+    assignment = db.query(LessonAssignment).filter(
+        LessonAssignment.lesson_id == id,
+        LessonAssignment.user_id == current_user.id
+    ).first()
+    if not assignment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found")
+
+    completed = list(getattr(assignment, "completed_sections", None) or [])
+    if payload.section_index not in completed:
+        completed.append(payload.section_index)
+        assignment.completed_sections = completed
+        flag_modified(assignment, "completed_sections")
+    
+    assignment.current_section = max(getattr(assignment, "current_section", 0) or 0, payload.section_index + 1)
+    flag_modified(assignment, "current_section")
+
+    if len(completed) >= payload.total_sections:
+        if assignment.completed_at is None:
+            assignment.completed_at = datetime.now(timezone.utc)
+            try:
+                recompute_user_risk_score(current_user.id, db)
+            except Exception:
+                pass
+
+    db.commit()
+    return {
+        "message": "Progress updated",
+        "completed_sections": assignment.completed_sections,
+        "current_section": assignment.current_section,
+        "completed": assignment.completed_at is not None
+    }
 
 @router.get("/adaptive-profile")
 def get_adaptive_profile(
@@ -615,7 +750,7 @@ def get_adaptive_profile(
     # Category breakdown
     categories_map = {}
     for assoc in assignments:
-        cat = getattr(assoc.lesson, "category", "Phishing Attacks") or "Phishing Attacks"
+        cat = infer_lesson_category(getattr(assoc.lesson, "title", ""), getattr(assoc.lesson, "topic", ""), getattr(assoc.lesson, "category", None))
         if cat not in categories_map:
             categories_map[cat] = {"total": 0, "completed": 0}
         categories_map[cat]["total"] += 1
@@ -630,7 +765,7 @@ def get_adaptive_profile(
         recommended_lessons.append({
             "id": lesson.id,
             "title": lesson.title,
-            "category": getattr(lesson, "category", "Phishing Attacks") or "Phishing Attacks",
+            "category": infer_lesson_category(getattr(lesson, "title", ""), getattr(lesson, "topic", ""), getattr(lesson, "category", None)),
             "difficulty": getattr(lesson, "difficulty", "Beginner") or "Beginner",
             "summary": getattr(lesson, "summary", "") or ""
         })
@@ -798,13 +933,16 @@ def get_lesson(
         "topic": lesson.topic,
         "title": lesson.title,
         "content": lesson.content,
-        "category": getattr(lesson, "category", "Phishing Attacks") or "Phishing Attacks",
-        "difficulty": getattr(lesson, "difficulty", "Beginner") or "Beginner",
+        "sections": getattr(lesson, "sections", None),
+        "category": infer_lesson_category(getattr(lesson, "title", ""), getattr(lesson, "topic", ""), getattr(lesson, "category", None)),
+        "difficulty": infer_lesson_difficulty(getattr(lesson, "title", ""), getattr(lesson, "topic", ""), getattr(lesson, "category", None), getattr(lesson, "difficulty", None)),
         "summary": getattr(lesson, "summary", "") or "",
         "is_emerging_threat": getattr(lesson, "is_emerging_threat", False),
         "cve_id": getattr(lesson, "cve_id", None),
         "completed_at": assignment.completed_at,
         "completed": assignment.completed_at is not None,
+        "completed_sections": getattr(assignment, "completed_sections", []) or [],
+        "current_section": getattr(assignment, "current_section", 0) or 0,
         "quiz": {
             "id": quiz.id if quiz else None,
             "questions": stripped_questions
@@ -1227,7 +1365,7 @@ def get_admin_learning_stats(
         published_lessons.append({
             "id": l.id,
             "title": l.title,
-            "category": l.category or "Phishing Attacks",
+            "category": infer_lesson_category(l.title, l.topic, l.category),
             "difficulty": l.difficulty or "Beginner",
             "summary": l.summary or "",
             "is_public": l.is_public if l.is_public is not None else True,
@@ -1296,10 +1434,12 @@ def get_admin_quiz_stats(
 
     published_quizzes = []
     for q in org_quizzes:
+        lesson_title = q.lesson.title if q.lesson else ""
+        lesson_topic = q.lesson.topic if q.lesson else ""
         published_quizzes.append({
             "id": q.id,
             "title": q.title or (q.lesson.title + " Quiz" if q.lesson else "Security Quiz"),
-            "category": q.category or "Phishing Attacks",
+            "category": infer_lesson_category(q.title or lesson_title, lesson_topic, q.category),
             "difficulty": q.difficulty or "Beginner",
             "summary": q.summary or "",
             "time_estimate": q.time_estimate or "5 mins",

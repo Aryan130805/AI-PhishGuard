@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   HelpCircle, CheckCircle, AlertTriangle, RefreshCw, Award, ChevronRight, 
-  Search, Shield, Zap, BookOpen, Clock, Lock, Sparkles, Filter, Check, ArrowRight,
-  KeyRound, UserCheck, Wifi, Cloud, Bot, Smartphone, Building2, ArrowLeft, Plus, Flame
+  Search, Shield, BookOpen, Clock, Filter, Check, ArrowRight,
+  KeyRound, UserCheck, Wifi, Cloud, Bot, Smartphone, Building2, Plus, Flame
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card } from '../components/ui/Card';
@@ -1114,8 +1114,7 @@ export const QUIZ_MODULES: QuizModule[] = [
 
 export default function EmployeeQuizzesPage() {
   const { addToast } = useToast();
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  const { isAdmin } = useAuth();
 
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('All');
@@ -1130,8 +1129,6 @@ export default function EmployeeQuizzesPage() {
   const [quizCategory, setQuizCategory] = useState<string>('Phishing Attacks');
   const [quizDifficulty, setQuizDifficulty] = useState<string>('Beginner');
   const [quizSummary, setQuizSummary] = useState<string>('');
-  const [quizTime, setQuizTime] = useState<string>('5 mins');
-  const [quizPassScore, setQuizPassScore] = useState<number>(75);
   const [quizIsPublic, setQuizIsPublic] = useState<boolean>(true);
 
   // Active Quiz Runner State
@@ -1144,14 +1141,6 @@ export default function EmployeeQuizzesPage() {
 
   // User Completion History Tracking
   const [completedModuleIds, setCompletedModuleIds] = useState<number[]>([101, 301, 501]);
-  const [quizProfile, setQuizProfile] = useState<{
-    knowledge_level: string;
-    streak_days: number;
-    completed_count: number;
-    total_assigned: number;
-    completion_percentage: number;
-    suggested_next_difficulty: string;
-  } | null>(null);
 
   const fetchQuizzes = async () => {
     try {
@@ -1286,10 +1275,43 @@ export default function EmployeeQuizzesPage() {
     return matchesCategory && matchesDifficulty && matchesSearch;
   });
 
+function shuffleQuestionOptions<T extends { question: string; options: string[]; correct_index?: number; explanation?: string }>(questions: T[]): T[] {
+  if (!questions || !Array.isArray(questions)) return [];
+
+  return questions.map(q => {
+    if (!q.options || !Array.isArray(q.options) || q.options.length <= 1) return q;
+
+    const correctIdx = typeof q.correct_index === 'number' ? q.correct_index : 0;
+    const items = q.options.map((opt, idx) => ({
+      text: opt,
+      isCorrect: idx === correctIdx
+    }));
+
+    // Fisher-Yates shuffle
+    const shuffled = [...items];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    const newCorrectIdx = shuffled.findIndex(item => item.isCorrect);
+
+    return {
+      ...q,
+      options: shuffled.map(item => item.text),
+      correct_index: newCorrectIdx >= 0 ? newCorrectIdx : 0
+    };
+  });
+}
+
   const handleStartQuiz = (module: QuizModule) => {
-    setActiveModule(module);
+    const shuffledQuestions = shuffleQuestionOptions(module.questions || []);
+    setActiveModule({
+      ...module,
+      questions: shuffledQuestions
+    });
     setCurrentQuestionIdx(0);
-    setUserAnswers(new Array(module.questions.length).fill(-1));
+    setUserAnswers(new Array(shuffledQuestions.length).fill(-1));
     setQuizSubmitted(false);
     setFinalScore(0);
     setHasPassed(false);
@@ -1359,7 +1381,7 @@ export default function EmployeeQuizzesPage() {
       
       {/* ── Active Quiz Runner View Modal ── */}
       {activeModule && (
-        <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+        <div data-active-modal="true" className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
           <Card className="w-full max-w-3xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden my-auto">
             
             {/* Quiz Header */}
@@ -1733,25 +1755,35 @@ export default function EmployeeQuizzesPage() {
       )}
 
       {/* ── DUAL-COLUMN LAYOUT: CATEGORY SIDEBAR ON LEFT + QUIZ MODULES ON RIGHT ── */}
-      <div className="flex flex-col lg:flex-row gap-6 items-start">
+      <div className="flex flex-col lg:flex-row gap-8 items-start">
         
-        {/* ── LEFT SIDEBAR: CATEGORY SELECTION MENU (Just like Learning Section) ── */}
-        <div className="w-full lg:w-72 flex-shrink-0 space-y-4 lg:sticky lg:top-4">
-          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden shadow-xl backdrop-blur-md">
+        {/* ── LEFT SIDEBAR: QUIZ CATEGORY SELECTION SECTION (Divided Standalone Section) ── */}
+        <div className="w-full lg:w-80 flex-shrink-0 lg:sticky lg:top-6 flex flex-col space-y-3 border-b lg:border-b-0 lg:border-r border-slate-800/80 pb-6 lg:pb-0 lg:pr-6">
+          
+          {/* Dedicated Section Header Badge */}
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[11px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <Filter size={13} className="text-emerald-400" /> Quiz Category Navigator
+            </span>
+            <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+              {categories.length - 1} Topics
+            </span>
+          </div>
+
+          {/* Standalone Card Container */}
+          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-md flex flex-col max-h-[calc(100vh-7rem)]">
             
             {/* Sidebar Header */}
-            <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+            <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/90 shrink-0">
               <div className="flex items-center gap-2">
                 <HelpCircle size={16} className="text-emerald-400" />
                 <p className="text-xs font-black text-white uppercase tracking-wider">Quiz Categories</p>
               </div>
-              <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full">
-                {categories.length - 1} Topics
-              </span>
+              <span className="text-[10px] text-slate-400 font-medium">Filter Assessments</span>
             </div>
 
-            {/* Category Navigation Items */}
-            <div className="p-2 space-y-1 max-h-[620px] overflow-y-auto">
+            {/* Category Navigation Items (Independent Scroll) */}
+            <div className="p-2 space-y-1.5 overflow-y-auto max-h-[calc(100vh-9.5rem)] overscroll-contain">
               {categories.map((cat) => {
                 const count = cat === 'All'
                   ? QUIZ_MODULES.length
@@ -1765,8 +1797,8 @@ export default function EmployeeQuizzesPage() {
                     onClick={() => setSelectedCategory(cat)}
                     className={`w-full text-left p-3 rounded-xl transition-all duration-200 flex items-center gap-3 border ${
                       isSelected
-                        ? 'bg-emerald-600/20 border-emerald-500/50 text-white shadow-md'
-                        : 'bg-slate-900/40 hover:bg-slate-800/80 border-slate-800/80 hover:border-slate-700 text-slate-300'
+                        ? 'bg-emerald-600/20 border-emerald-500/60 text-white shadow-md shadow-emerald-500/10'
+                        : 'bg-slate-950/40 hover:bg-slate-800/80 border-slate-800/60 hover:border-slate-700 text-slate-300'
                     } group`}
                   >
                     <div className={`p-2 rounded-lg shrink-0 transition-colors ${

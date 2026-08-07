@@ -151,16 +151,32 @@ export default function AdminQuizzes() {
       });
       setEmployees(empPerf);
 
-      setQuizzes((quizRows || []).map(q => ({
-        id: q.id,
-        title: q.title || 'Untitled Quiz',
-        category: q.category || 'Phishing Attacks',
-        difficulty: q.difficulty || 'Beginner',
-        summary: q.summary || '',
-        time_estimate: q.time_estimate || '5 mins',
-        pass_score: q.pass_score || 75,
-        is_public: q.is_public ?? true
-      })));
+      setQuizzes((quizRows || []).map(q => {
+        const title = (q.title || '').toLowerCase();
+        const cat = q.category;
+        let inferredCat = cat;
+        if (!cat || cat === 'Phishing Attacks' || cat === 'General Security') {
+          if (title.includes('ransomware') || title.includes('malware')) inferredCat = 'Malware & Ransomware';
+          else if (title.includes('password') || title.includes('2fa') || title.includes('mfa') || title.includes('passkey')) inferredCat = 'Password & Authentication Security';
+          else if (title.includes('social') || title.includes('pretext') || title.includes('impersonation')) inferredCat = 'Social Engineering';
+          else if (title.includes('network') || title.includes('wi-fi') || title.includes('vpn')) inferredCat = 'Network Security';
+          else if (title.includes('cloud') || title.includes('saas') || title.includes('iam')) inferredCat = 'Cloud Security';
+          else if (title.includes('ai') || title.includes('deepfake') || title.includes('prompt')) inferredCat = 'AI & Modern Cyber Threats';
+          else if (title.includes('mobile') || title.includes('smishing') || title.includes('apk')) inferredCat = 'Mobile Security';
+          else if (title.includes('workplace') || title.includes('clean desk') || title.includes('usb')) inferredCat = 'Workplace Security';
+          else if (title.includes('phish') || title.includes('quish')) inferredCat = 'Phishing Attacks';
+        }
+        return {
+          id: q.id,
+          title: q.title || 'Untitled Quiz',
+          category: inferredCat || 'General Security',
+          difficulty: q.difficulty || 'Beginner',
+          summary: q.summary || '',
+          time_estimate: q.time_estimate || '5 mins',
+          pass_score: q.pass_score || 75,
+          is_public: q.is_public ?? true
+        };
+      }));
     } catch (err) {
       console.error('Failed to load quiz stats from Supabase:', err);
     } finally {
@@ -511,7 +527,7 @@ export default function AdminQuizzes() {
 
       {/* ── CREATE QUIZ MODAL ── */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+        <div data-active-modal="true" className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
           <Card className="w-full max-w-2xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden p-6 space-y-5 my-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
               <div>

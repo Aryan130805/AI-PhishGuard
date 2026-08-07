@@ -182,7 +182,9 @@ CREATE TABLE IF NOT EXISTS public.lesson_assignments (
     user_id      INT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     lesson_id    INT NOT NULL REFERENCES public.lessons(id) ON DELETE CASCADE,
     assigned_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    completed_at TIMESTAMPTZ
+    completed_at TIMESTAMPTZ,
+    completed_sections JSONB DEFAULT '[]'::jsonb,
+    current_section INT DEFAULT 0
 );
 
 -- Notifications

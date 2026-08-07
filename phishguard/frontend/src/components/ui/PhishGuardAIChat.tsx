@@ -17,10 +17,31 @@ export default function PhishGuardAIChat() {
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [isModalOrQuizActive, setIsModalOrQuizActive] = useState(false);
   
   const { user } = useAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const checkState = () => {
+      const modalElement = document.querySelector('[data-active-modal="true"]');
+      const isQuizPath = window.location.pathname.startsWith('/quiz');
+      setIsModalOrQuizActive(!!modalElement || isQuizPath);
+    };
+
+    checkState();
+    const observer = new MutationObserver(checkState);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+
+    // Also check on interval to capture SPA navigation transitions
+    const interval = setInterval(checkState, 300);
+
+    return () => {
+      observer.disconnect();
+      clearInterval(interval);
+    };
+  }, []);
 
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -240,6 +261,10 @@ Here are essential recommendations:
       }
     ]);
   };
+
+  if (isModalOrQuizActive) {
+    return null;
+  }
 
   return (
     <>

@@ -86,10 +86,6 @@ def create_app() -> FastAPI:
         # applied via supabase_migration.sql, so we skip it entirely to avoid
         # "column already exists" errors on startup.
         from app.database import engine
-        if not engine.url.drivername.startswith("sqlite"):
-            print("[startup] PostgreSQL/Supabase detected — skipping SQLite column patcher.")
-            return
-
         try:
             from sqlalchemy import inspect
             inspector = inspect(engine)
@@ -118,7 +114,7 @@ def create_app() -> FastAPI:
                 if "lessons" in inspector.get_table_names():
                     cols = [c["name"] for c in inspector.get_columns("lessons")]
                     lesson_cols = [
-                        ("category", "VARCHAR DEFAULT 'Phishing Attacks'"),
+                        ("category", "VARCHAR DEFAULT 'General Security'"),
                         ("difficulty", "VARCHAR DEFAULT 'Beginner'"),
                         ("summary", "VARCHAR"),
                         ("is_emerging_threat", "BOOLEAN DEFAULT 0"),
@@ -135,7 +131,7 @@ def create_app() -> FastAPI:
                     cols = [c["name"] for c in inspector.get_columns("quizzes")]
                     quiz_cols = [
                         ("title", "VARCHAR"),
-                        ("category", "VARCHAR DEFAULT 'Phishing Attacks'"),
+                        ("category", "VARCHAR DEFAULT 'General Security'"),
                         ("difficulty", "VARCHAR DEFAULT 'Beginner'"),
                         ("summary", "VARCHAR"),
                         ("time_estimate", "VARCHAR DEFAULT '5 mins'"),
@@ -148,7 +144,7 @@ def create_app() -> FastAPI:
                             conn.execute(text(f"ALTER TABLE quizzes ADD COLUMN {col_name} {col_type}"))
                 conn.commit()
         except Exception as e:
-            print(f"[startup] SQLite column sync warning: {e}")
+            print(f"[startup] DB column sync notice: {e}")
 
     @app.get("/health")
     def health_check(db: Session = Depends(get_db)):

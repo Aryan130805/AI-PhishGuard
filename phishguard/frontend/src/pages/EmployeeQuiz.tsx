@@ -84,6 +84,35 @@ const FALLBACK_QUIZZES: Record<number, QuizData> = {
   }
 };
 
+function shuffleQuestionOptions<T extends { question: string; options: string[]; correct_index?: number }>(questions: T[]): T[] {
+  if (!questions || !Array.isArray(questions)) return [];
+
+  return questions.map(q => {
+    if (!q.options || !Array.isArray(q.options) || q.options.length <= 1) return q;
+
+    const correctIdx = typeof q.correct_index === 'number' ? q.correct_index : 0;
+    const items = q.options.map((opt, idx) => ({
+      text: opt,
+      isCorrect: idx === correctIdx
+    }));
+
+    // Fisher-Yates shuffle
+    const shuffled = [...items];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    const newCorrectIdx = shuffled.findIndex(item => item.isCorrect);
+
+    return {
+      ...q,
+      options: shuffled.map(item => item.text),
+      correct_index: newCorrectIdx >= 0 ? newCorrectIdx : 0
+    };
+  });
+}
+
 export default function EmployeeQuiz() {
   const { id } = useParams<{ id: string }>();
   const { addToast } = useToast();
@@ -104,8 +133,9 @@ export default function EmployeeQuiz() {
       const res = await apiFetch(`/training/quiz/${id}`).catch(() => null);
       if (res && res.ok) {
         const data = await res.json();
-        setQuiz(data);
-        setAnswers(new Array(data.questions.length).fill(-1));
+        const shuffled = shuffleQuestionOptions(data.questions || []);
+        setQuiz({ ...data, questions: shuffled });
+        setAnswers(new Array(shuffled.length).fill(-1));
         setResult(null);
         return;
       }
@@ -117,7 +147,8 @@ export default function EmployeeQuiz() {
     try {
       const { data: supaLesson } = await supabase.from('lessons').select('*').eq('id', quizIdNum).maybeSingle();
       if (supaLesson && supaLesson.quiz) {
-        const questions = Array.isArray(supaLesson.quiz) ? supaLesson.quiz : [supaLesson.quiz];
+        const rawQs = Array.isArray(supaLesson.quiz) ? supaLesson.quiz : [supaLesson.quiz];
+        const questions = shuffleQuestionOptions(rawQs);
         setQuiz({
           id: quizIdNum,
           lesson_id: quizIdNum,
@@ -134,8 +165,9 @@ export default function EmployeeQuiz() {
 
     // 3. Fallback quiz data
     const fallback = FALLBACK_QUIZZES[quizIdNum] || FALLBACK_QUIZZES[1];
-    setQuiz(fallback);
-    setAnswers(new Array(fallback.questions.length).fill(-1));
+    const shuffledFallback = shuffleQuestionOptions(fallback.questions || []);
+    setQuiz({ ...fallback, questions: shuffledFallback });
+    setAnswers(new Array(shuffledFallback.length).fill(-1));
     setResult(null);
   };
 

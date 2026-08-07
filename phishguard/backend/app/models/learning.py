@@ -14,8 +14,9 @@ class Lesson(Base):
     topic = Column(String, nullable=False)
     title = Column(String, nullable=False)
     content = Column(String, nullable=False)
+    sections = Column(JSON_TYPE, nullable=True)
     ai_generated = Column(Boolean, default=False)
-    category = Column(String, default="Phishing Attacks")
+    category = Column(String, default="General Security")
     difficulty = Column(String, default="Beginner")
     summary = Column(String, nullable=True)
     is_emerging_threat = Column(Boolean, default=False)
@@ -33,7 +34,7 @@ class Quiz(Base):
     id = Column(Integer, primary_key=True, index=True)
     lesson_id = Column(Integer, ForeignKey("lessons.id", ondelete="CASCADE"), nullable=True)
     title = Column(String, nullable=True)
-    category = Column(String, default="Phishing Attacks")
+    category = Column(String, default="General Security")
     difficulty = Column(String, default="Beginner")
     summary = Column(String, nullable=True)
     time_estimate = Column(String, default="5 mins")
@@ -78,7 +79,10 @@ class LessonAssignment(Base):
     lesson_id = Column(Integer, ForeignKey("lessons.id", ondelete="CASCADE"), nullable=False)
     assigned_at = Column(DateTime(timezone=True), server_default=func.now())
     completed_at = Column(DateTime(timezone=True), nullable=True)
+    completed_sections = Column(JSON_TYPE, nullable=True)
+    current_section = Column(Integer, default=0)
 
     user = relationship("User")
     lesson = relationship("Lesson")
+
 

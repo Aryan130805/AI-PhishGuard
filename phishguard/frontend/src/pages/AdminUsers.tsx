@@ -199,8 +199,9 @@ const INITIAL_PENDING_REQUESTS: PendingRequest[] = [
 ];
 
 export default function AdminUsers() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { addToast } = useToast();
+  const isOrgAdmin = Boolean(user?.is_admin || isAdmin || user?.role_name === 'Admin' || user?.role_name === 'admin');
   
   const [employees, setEmployees] = useState<EmployeeRecord[]>(INITIAL_DEMO_EMPLOYEES);
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>(INITIAL_PENDING_REQUESTS);
@@ -534,13 +535,17 @@ export default function AdminUsers() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-extrabold tracking-tight text-white">Employee Directory</h1>
+            <h1 className="text-3xl font-extrabold tracking-tight text-white">
+              {isOrgAdmin ? 'Employee Directory' : 'Team & Staff Directory'}
+            </h1>
             <span className="px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs font-bold">
               {user?.organization_name || 'Organization Staff'}
             </span>
           </div>
           <p className="mt-1 text-sm text-slate-400">
-            Manage organization members, approve joining requests, and monitor security risk bands.
+            {isOrgAdmin
+              ? 'Manage organization members, approve joining requests, and monitor security risk bands.'
+              : 'View organization colleagues and team security awareness scores.'}
           </p>
         </div>
 
@@ -555,7 +560,7 @@ export default function AdminUsers() {
           </button>
 
           {/* Add Employee Button: Only shown if user is Org Admin */}
-          {user?.is_admin && (
+          {isOrgAdmin && (
             <button
               onClick={() => setIsAddModalOpen(true)}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-xs shadow-lg shadow-blue-500/25 transition-all hover:scale-[1.02] active:scale-[0.98]"
@@ -582,18 +587,33 @@ export default function AdminUsers() {
           <p className="text-xs text-slate-500 mt-2">Active members in database</p>
         </Card>
 
-        <Card className="border border-slate-800 bg-slate-900/60 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Joining Requests</p>
-              <h3 className="text-2xl font-bold text-amber-400 mt-1">{pendingRequests.length}</h3>
+        {isOrgAdmin ? (
+          <Card className="border border-slate-800 bg-slate-900/60 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Joining Requests</p>
+                <h3 className="text-2xl font-bold text-amber-400 mt-1">{pendingRequests.length}</h3>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20">
+                <Clock size={20} />
+              </div>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20">
-              <Clock size={20} />
+            <p className="text-xs text-amber-400/80 mt-2">Pending admin approval</p>
+          </Card>
+        ) : (
+          <Card className="border border-slate-800 bg-slate-900/60 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Avg Security Score</p>
+                <h3 className="text-2xl font-bold text-blue-400 mt-1">{stats.avgScore}%</h3>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center border border-blue-500/20">
+                <Shield size={20} />
+              </div>
             </div>
-          </div>
-          <p className="text-xs text-amber-400/80 mt-2">Pending admin approval</p>
-        </Card>
+            <p className="text-xs text-blue-400/80 mt-2">Team awareness benchmark</p>
+          </Card>
+        )}
 
         <Card className="border border-slate-800 bg-slate-900/60 p-5">
           <div className="flex items-center justify-between">
@@ -623,7 +643,7 @@ export default function AdminUsers() {
       </div>
 
       {/* Navigation Tabs (Admin Only) */}
-      {user?.is_admin && (
+      {isOrgAdmin && (
         <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
           <button
             onClick={() => setActiveTab('directory')}
